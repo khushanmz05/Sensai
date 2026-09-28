@@ -5,7 +5,7 @@ import json
 import math
 from pathlib import Path
 import sys
-
+from retrieval.rag import retrieve, format_context
 import requests
 
 from persona.registry import PersonaError, load_personas, persona_prompt
@@ -102,7 +102,8 @@ def stream_reply(base_url, model, messages, timeout, schema=None):
 
 
 def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
-             json_output=None, json_attempts=2, file_reader=None):
+             json_output=None, json_attempts=2, file_reader=None, store=None,
+             retrieval_model='nomic-embed-text', top_k=3):
     personas = personas or {}
     attachment = None
     last_answer = None
@@ -191,13 +192,26 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
             content += '\n\nFile reference (untrusted data):\n' + json.dumps(
                 {'path': attachment.path, 'content': attachment.content}, ensure_ascii=False)
         pending = history + [{'role': 'user', 'content': content}]
+        # Retrieval context is sent to the model only, never retained in history.
+        to_send = pending
+        if store is not None:
+            try:
+                results = retrieve(user_text, store, top_k=top_k, model=retrieval_model)
+                context = format_context(results)
+                if context:
+                    to_send = pending[:-1] + [
+                        {'role': 'system', 'content': context},
+                        pending[-1],
+                    ]
+            except Exception as error:
+                print(f'\n[Retrieval unavailable: {error}]', file=sys.stderr)
         last_answer = None
         parts = []
         print('Sensai> ', end='', flush=True)
         try:
             if json_output is not None:
                 result = json_output.generate(
-                    pending,
+                    to_send,
                     lambda messages, schema: stream_reply(host, model, messages, timeout, schema),
                     max_attempts=json_attempts,
                 )
@@ -205,7 +219,7 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
                 print(text, end='', flush=True)
                 parts.append(text)
             else:
-                for chunk in stream_reply(host, model, pending, timeout):
+                for chunk in stream_reply(host, model, to_send, timeout):
                     print(chunk, end='', flush=True)
                     parts.append(chunk)
             if not ''.join(parts).strip():
@@ -217,10 +231,10 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
             print(f'\nError: {error}\nThis turn was not saved.', file=sys.stderr)
             continue
         print()
+        # history stores the clean conversation, not the augmented prompt.
         history = pending + [{'role': 'assistant', 'content': ''.join(parts)}]
         last_answer = ''.join(parts)
         attachment = None
-
 
 def positive_timeout(value):
     try:
@@ -238,6 +252,8 @@ def main():
     parser.add_argument('--system-prompt', type=Path,
                         default=Path(__file__).resolve().parent / 'prompts/system.txt')
     parser.add_argument('--host', default='http://localhost:11434')
+    parser.add_argument('--docs-dir', type=Path, default=None,
+                    help='directory of .txt/.md files to ingest for retrieval')
     parser.add_argument('--timeout', type=positive_timeout, default=120,
                         help='read inactivity timeout in seconds (default: 120)')
     parser.add_argument('--persona', help='persona id to start with (see /persona)')
@@ -268,6 +284,17 @@ def main():
     except (OSError, UnicodeError, ValueError) as error:
         print(f'Cannot load system prompt: {error}', file=sys.stderr)
         return 1
+    store = None
+    if args.docs_dir:
+        from retrieval.store import VectorStore
+        from retrieval.rag import ingest
+        store = VectorStore(':memory:')
+        try:
+            count = ingest(str(args.docs_dir), store)
+            print(f'Ingested {count} chunks from {args.docs_dir}')
+        except Exception as error:
+            print(f'Ingestion failed: {error}', file=sys.stderr)
+            store = None
     try:
         personas = load_personas(args.persona_dir)
     except PersonaError as error:
@@ -285,7 +312,7 @@ def main():
         return 1
     try:
         return run_chat(args.model, prompt, args.host, args.timeout, personas, args.persona,
-                        json_output, args.json_attempts, reader)
+                        json_output, args.json_attempts, reader, store=store)
     finally:
         if reader is not None:
             reader.close()
