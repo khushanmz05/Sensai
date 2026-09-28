@@ -2,6 +2,7 @@
 import math
 import sqlite3
 import struct
+import json
 
 
 def _vector_to_blob(vector: list[float]) -> bytes:
@@ -42,30 +43,43 @@ class VectorStore:
                 start_line INTEGER NOT NULL,
                 end_line INTEGER NOT NULL,
                 content TEXT NOT NULL,
-                embedding BLOB NOT NULL
+                embedding BLOB NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}'
             )
         """)
         self.conn.commit()
 
     def add(self, source_file: str, start_line: int, end_line: int,
-            content: str, embedding: list[float]) -> int:
+            content: str, embedding: list[float], metadata: dict | None = None) -> int:
         """Insert one chunk and its embedding. Returns the new row id."""
+        metadata_json = json.dumps(metadata or {})
         cursor = self.conn.execute(
-            "INSERT INTO chunks (source_file, start_line, end_line, content, embedding) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (source_file, start_line, end_line, content, _vector_to_blob(embedding)),
+            "INSERT INTO chunks (source_file, start_line, end_line, content, embedding, metadata) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (source_file, start_line, end_line, content, _vector_to_blob(embedding), metadata_json),
         )
         self.conn.commit()
         return cursor.lastrowid
 
-    def search(self, query_vector: list[float], top_k: int = 5) -> list[dict]:
-        """Return the top_k most similar chunks, ranked by cosine similarity."""
+    def search(self, query_vector: list[float], top_k: int = 5,
+            filters: dict | None = None) -> list[dict]:
+        """Return the top_k most similar chunks, ranked by cosine similarity.
+
+        filters: optional dict of metadata key-value pairs that must match
+        exactly for a chunk to be included, e.g. {"version": "v2"}.
+        """
         rows = self.conn.execute(
-            "SELECT id, source_file, start_line, end_line, content, embedding FROM chunks"
+            "SELECT id, source_file, start_line, end_line, content, embedding, metadata FROM chunks"
         ).fetchall()
 
         scored = []
-        for row_id, source_file, start_line, end_line, content, blob in rows:
+        for row_id, source_file, start_line, end_line, content, blob, metadata_json in rows:
+            metadata = json.loads(metadata_json)
+
+            if filters:
+                if not all(metadata.get(key) == value for key, value in filters.items()):
+                    continue
+
             vector = _blob_to_vector(blob)
             score = cosine_similarity(query_vector, vector)
             scored.append({
@@ -74,6 +88,7 @@ class VectorStore:
                 "start_line": start_line,
                 "end_line": end_line,
                 "content": content,
+                "metadata": metadata,
                 "score": score,
             })
 

@@ -55,6 +55,36 @@ class VectorStoreTests(unittest.TestCase):
         results = self.store.search(original, top_k=1)
         self.assertAlmostEqual(results[0]["score"], 1.0, places=5)
 
+    def test_add_without_metadata_defaults_to_empty_dict(self):
+        self.store.add("a.md", 1, 1, "content", [1, 0, 0])
+        results = self.store.search([1, 0, 0], top_k=1)
+        self.assertEqual(results[0]["metadata"], {})
+
+    def test_add_with_metadata_is_stored_and_returned(self):
+        self.store.add("a.md", 1, 1, "content", [1, 0, 0], metadata={"version": "v2"})
+        results = self.store.search([1, 0, 0], top_k=1)
+        self.assertEqual(results[0]["metadata"], {"version": "v2"})
+
+    def test_filter_excludes_non_matching_metadata(self):
+        self.store.add("a.md", 1, 1, "v1 content", [1, 0, 0], metadata={"version": "v1"})
+        self.store.add("b.md", 1, 1, "v2 content", [1, 0, 0], metadata={"version": "v2"})
+
+        results = self.store.search([1, 0, 0], top_k=5, filters={"version": "v2"})
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["source_file"], "b.md")
+
+    def test_filter_with_no_matches_returns_empty(self):
+        self.store.add("a.md", 1, 1, "content", [1, 0, 0], metadata={"version": "v1"})
+        results = self.store.search([1, 0, 0], top_k=5, filters={"version": "v99"})
+        self.assertEqual(results, [])
+
+    def test_no_filter_returns_all_regardless_of_metadata(self):
+        self.store.add("a.md", 1, 1, "content", [1, 0, 0], metadata={"version": "v1"})
+        self.store.add("b.md", 1, 1, "content", [1, 0, 0], metadata={"version": "v2"})
+        results = self.store.search([1, 0, 0], top_k=5)
+        self.assertEqual(len(results), 2)
+
 
 if __name__ == '__main__':
     unittest.main()
