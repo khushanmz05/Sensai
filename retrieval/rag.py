@@ -4,10 +4,57 @@ import os
 from retrieval.chunking import chunk_text
 from retrieval.embeddings import embed
 from retrieval.store import VectorStore
-
+from retrieval.rewrite import rewrite_query
+from retrieval.hybrid import hybrid_search
+from retrieval.rerank import rerank
 
 DEFAULT_MODEL = "nomic-embed-text"
 SUPPORTED_EXTENSIONS = (".txt", ".md")
+
+def retrieve_advanced(query: str, store: VectorStore, top_k: int = 5,
+                       model: str = DEFAULT_MODEL,
+                       rewrite_model: str = "qwen3",
+                       rerank_model: str = "qwen3",
+                       base_url: str = "http://localhost:11434",
+                       alpha: float = 0.5,
+                       rerank_top_n: int = 10,
+                       rejection_threshold: float = 3.0,
+                       filters: dict | None = None,
+                       use_rewriting: bool = True,
+                       use_reranking: bool = True) -> list[dict]:
+    """R2 advanced retrieval: query rewriting + hybrid search + reranking.
+
+    Falls back gracefully: rewriting and reranking failures never crash
+    retrieval, they just reduce to plain hybrid search results.
+    """
+    if not query.strip():
+        return []
+
+    queries = [query]
+    if use_rewriting:
+        queries = rewrite_query(query, model=rewrite_model, base_url=base_url)
+        if not queries:
+            queries = [query]
+
+    # Run hybrid search for each query variant, then merge results by id,
+    # keeping the highest score seen for any chunk across all variants.
+    merged: dict[int, dict] = {}
+    for q in queries:
+        query_vector = embed([q], model=model)[0]
+        results = hybrid_search(q, query_vector, store, top_k=rerank_top_n,
+                                 alpha=alpha, filters=filters)
+        for r in results:
+            existing = merged.get(r["id"])
+            if existing is None or r["score"] > existing["score"]:
+                merged[r["id"]] = r
+
+    combined = sorted(merged.values(), key=lambda r: r["score"], reverse=True)
+
+    if use_reranking and combined:
+        combined = rerank(query, combined, model=rerank_model, base_url=base_url,
+                           top_n=rerank_top_n, rejection_threshold=rejection_threshold)
+
+    return combined[:top_k]
 
 
 def ingest(directory: str, store: VectorStore, model: str = DEFAULT_MODEL,
