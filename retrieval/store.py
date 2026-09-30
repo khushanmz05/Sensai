@@ -94,6 +94,29 @@ class VectorStore:
 
         scored.sort(key=lambda r: r["score"], reverse=True)
         return scored[:top_k]
+    
+    def get_all(self) -> list[dict]:
+        """Return every chunk with its embedding vector and metadata.
+
+        Used by hybrid search, which needs the full corpus to run BM25
+        alongside vector similarity.
+        """
+        rows = self.conn.execute(
+            "SELECT id, source_file, start_line, end_line, content, embedding, metadata FROM chunks"
+        ).fetchall()
+
+        chunks = []
+        for row_id, source_file, start_line, end_line, content, blob, metadata_json in rows:
+            chunks.append({
+                "id": row_id,
+                "source_file": source_file,
+                "start_line": start_line,
+                "end_line": end_line,
+                "content": content,
+                "vector": _blob_to_vector(blob),
+                "metadata": json.loads(metadata_json),
+            })
+        return chunks
 
     def close(self):
         self.conn.close()
