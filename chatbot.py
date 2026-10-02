@@ -8,6 +8,8 @@ import sys
 
 import requests
 
+from persona.registry import PersonaError, load_personas, persona_prompt
+
 
 class ChatError(Exception):
     """An error that can be explained without a traceback."""
@@ -62,9 +64,10 @@ def stream_reply(base_url, model, messages, timeout):
         raise ChatError(f'HTTP request failed: {error}') from error
 
 
-def run_chat(model, system_prompt, host, timeout):
+def run_chat(model, system_prompt, host, timeout, personas=None):
+    personas = personas or {}
     history = [{'role': 'system', 'content': system_prompt}]
-    print(f'Sensai | model: {model} | /exit to quit, /clear to reset')
+    print(f'Sensai | model: {model} | /exit to quit, /clear to reset, /persona to switch')
     while True:
         try:
             user_text = input('\nYou> ').strip()
@@ -76,6 +79,17 @@ def run_chat(model, system_prompt, host, timeout):
         if user_text == '/clear':
             history = history[:1]
             print('Conversation cleared; system prompt retained.')
+            continue
+        if user_text == '/persona' or user_text.startswith('/persona '):
+            persona_id = user_text[len('/persona'):].strip()
+            if not persona_id:
+                print('Personas: ' + (', '.join(personas) or 'none available'))
+            elif persona_id not in personas:
+                print(f'Unknown persona {persona_id!r}. Type /persona to list them.')
+            else:
+                history[0] = {'role': 'system',
+                    'content': persona_prompt(system_prompt, personas[persona_id])}
+                print(f'Persona switched to {personas[persona_id]["name"]}; history kept.')
             continue
         if not user_text:
             print('Empty input: enter a message.')
@@ -129,7 +143,12 @@ def main():
     except (OSError, UnicodeError, ValueError) as error:
         print(f'Cannot load system prompt: {error}', file=sys.stderr)
         return 1
-    return run_chat(args.model, prompt, args.host, args.timeout)
+    try:
+        personas = load_personas()
+    except PersonaError as error:
+        print(f'Cannot load personas: {error}', file=sys.stderr)
+        return 1
+    return run_chat(args.model, prompt, args.host, args.timeout, personas)
 
 
 if __name__ == '__main__':

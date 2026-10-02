@@ -10,6 +10,8 @@ from unittest.mock import patch
 import requests
 import chatbot
 
+PERSONA = {'id': 'tutor', 'name': 'Tutor', 'tone': 'calm', 'role': 'teacher', 'scope': 'basics'}
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -47,11 +49,11 @@ class ChatTests(unittest.TestCase):
             {'message': {'content': ''}, 'done': True},
         ]))
 
-    def run_cli(self, inputs):
+    def run_cli(self, inputs, personas=None):
         output = io.StringIO()
         with patch('builtins.input', side_effect=inputs), \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-            chatbot.run_chat('test-model', 'System prompt', self.url, 2)
+            chatbot.run_chat('test-model', 'System prompt', self.url, 2, personas)
         return output.getvalue()
 
     def test_stream_delivers_separate_unicode_chunks(self):
@@ -113,6 +115,23 @@ class ChatTests(unittest.TestCase):
         with patch('chatbot.stream_reply', side_effect=[KeyboardInterrupt, iter(['OK'])]) as call:
             self.assertIn('cancelled', self.run_cli(['Cancel me', 'Retry', '/exit']))
             self.assertEqual(len(call.call_args.args[2]), 2)
+
+    def test_persona_switch_keeps_history(self):
+        self.reply('Noted')
+        self.reply('Mark')
+        self.run_cli(['My name is Mark', '/persona tutor', 'What is my name?', '/exit'],
+                     {'tutor': PERSONA})
+        messages = self.server.payloads[1]['messages']
+        self.assertTrue(messages[0]['content'].startswith('System prompt'))
+        self.assertIn('Role: teacher', messages[0]['content'])
+        self.assertEqual([m['content'] for m in messages[1:]],
+                         ['My name is Mark', 'Noted', 'What is my name?'])
+
+    def test_persona_list_and_unknown_make_no_http_request(self):
+        output = self.run_cli(['/persona', '/persona nobody', '/exit'], {'tutor': PERSONA})
+        self.assertIn('Personas: tutor', output)
+        self.assertIn("Unknown persona 'nobody'", output)
+        self.assertEqual(self.server.payloads, [])
 
 
 if __name__ == '__main__':
