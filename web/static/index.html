@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sensai</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    #log { white-space: pre-wrap; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; min-height: 8rem; }
+    .user { font-weight: bold; margin-top: 1rem; }
+    .error { color: #b00020; }
+    form { display: flex; gap: .5rem; margin-top: 1rem; }
+    input { flex: 1; padding: .5rem; }
+    #status { color: #666; font-size: .9rem; margin-top: .5rem; }
+  </style>
+</head>
+<body>
+  <h1>Sensai</h1>
+  <div id="log"></div>
+  <form id="form">
+    <input id="message" autocomplete="off" placeholder="Ask something">
+    <button id="send">Send</button>
+  </form>
+  <div id="status">Ready.</div>
+  <script>
+    const log = document.getElementById('log');
+    const form = document.getElementById('form');
+    const input = document.getElementById('message');
+    const send = document.getElementById('send');
+    const status = document.getElementById('status');
+
+    function addLine(className, text) {
+      const line = document.createElement('div');
+      line.className = className;
+      line.textContent = text;
+      log.appendChild(line);
+      return line;
+    }
+
+    function finish(text) {
+      status.textContent = text;
+      send.disabled = false;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = '';
+      send.disabled = true;
+      addLine('user', 'You: ' + message);
+      const reply = addLine('assistant', '');
+
+      let runId;
+      try {
+        const response = await fetch('/api/runs', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({message}),
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        runId = (await response.json()).run_id;
+      } catch (error) {
+        addLine('error', 'Error: ' + error.message);
+        return finish('Failed.');
+      }
+
+      status.textContent = 'Run ' + runId + ': running';
+      const source = new EventSource('/api/runs/' + runId + '/events');
+      source.addEventListener('text_delta', (e) => {
+        reply.textContent += JSON.parse(e.data).payload.text;
+      });
+      source.addEventListener('done', (e) => {
+        source.close();
+        finish('Run ' + runId + ': ' + JSON.parse(e.data).payload.status);
+      });
+      // Fires for both server "error" events (with data) and lost connections.
+      source.onerror = (e) => {
+        if (e.data) {
+          addLine('error', 'Error: ' + JSON.parse(e.data).payload.message);
+          return;
+        }
+        if (source.readyState === EventSource.CLOSED) return;
+        source.close();
+        addLine('error', 'Error: connection to server lost.');
+        finish('Run ' + runId + ': failed');
+      };
+    });
+  </script>
+</body>
+</html>
