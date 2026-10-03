@@ -9,6 +9,9 @@ from unittest.mock import patch
 
 import requests
 import chatbot
+from persona.registry import load_personas
+
+PERSONA = {'id': 'tutor', 'name': 'Tutor', 'tone': 'calm', 'role': 'teacher', 'scope': 'basics'}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -47,11 +50,11 @@ class ChatTests(unittest.TestCase):
             {'message': {'content': ''}, 'done': True},
         ]))
 
-    def run_cli(self, inputs):
+    def run_cli(self, inputs, personas=None, active=None):
         output = io.StringIO()
         with patch('builtins.input', side_effect=inputs), \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-            chatbot.run_chat('test-model', 'System prompt', self.url, 2)
+            chatbot.run_chat('test-model', 'System prompt', self.url, 2, personas, active)
         return output.getvalue()
 
     def test_stream_delivers_separate_unicode_chunks(self):
@@ -113,6 +116,41 @@ class ChatTests(unittest.TestCase):
         with patch('chatbot.stream_reply', side_effect=[KeyboardInterrupt, iter(['OK'])]) as call:
             self.assertIn('cancelled', self.run_cli(['Cancel me', 'Retry', '/exit']))
             self.assertEqual(len(call.call_args.args[2]), 2)
+
+    def test_persona_switch_keeps_history(self):
+        self.reply('Noted')
+        self.reply('Mark')
+        self.run_cli(['My name is Mark', '/persona tutor', 'What is my name?', '/exit'],
+                     {'tutor': PERSONA})
+        messages = self.server.payloads[1]['messages']
+        self.assertTrue(messages[0]['content'].startswith('System prompt'))
+        self.assertIn('Role: teacher', messages[0]['content'])
+        self.assertEqual([m['content'] for m in messages[1:]],
+                         ['My name is Mark', 'Noted', 'What is my name?'])
+
+    def test_persona_list_and_unknown_make_no_http_request(self):
+        output = self.run_cli(['/persona', '/persona nobody', '/exit'], {'tutor': PERSONA})
+        self.assertIn('Personas: tutor', output)
+        self.assertIn("Unknown persona 'nobody'", output)
+        self.assertEqual(self.server.payloads, [])
+
+    def test_start_persona_and_switch_between_real_personas(self):
+        self.reply('Recursion is a function calling itself.')
+        self.reply('What is the base case?')
+        output = self.run_cli(['Explain recursion', '/persona reviewer', 'Check me', '/exit'],
+                              load_personas(), 'explainer')
+        self.assertIn('persona: explainer', output)
+        first, second = (payload['messages'] for payload in self.server.payloads)
+        self.assertIn('Persona: Explainer', first[0]['content'])
+        self.assertIn('Persona: Reviewer', second[0]['content'])
+        self.assertEqual(second[1:], first[1:] + [
+            {'role': 'assistant', 'content': 'Recursion is a function calling itself.'},
+            {'role': 'user', 'content': 'Check me'},
+        ])
+
+    def test_persona_list_marks_active(self):
+        output = self.run_cli(['/persona', '/exit'], load_personas(), 'reviewer')
+        self.assertIn('explainer, reviewer (active)', output)
 
 
 if __name__ == '__main__':
