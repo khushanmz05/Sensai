@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import requests
 import chatbot
+from persona.registry import load_personas
 
 PERSONA = {'id': 'tutor', 'name': 'Tutor', 'tone': 'calm', 'role': 'teacher', 'scope': 'basics'}
 
@@ -49,11 +50,11 @@ class ChatTests(unittest.TestCase):
             {'message': {'content': ''}, 'done': True},
         ]))
 
-    def run_cli(self, inputs, personas=None):
+    def run_cli(self, inputs, personas=None, active=None):
         output = io.StringIO()
         with patch('builtins.input', side_effect=inputs), \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-            chatbot.run_chat('test-model', 'System prompt', self.url, 2, personas)
+            chatbot.run_chat('test-model', 'System prompt', self.url, 2, personas, active)
         return output.getvalue()
 
     def test_stream_delivers_separate_unicode_chunks(self):
@@ -132,6 +133,24 @@ class ChatTests(unittest.TestCase):
         self.assertIn('Personas: tutor', output)
         self.assertIn("Unknown persona 'nobody'", output)
         self.assertEqual(self.server.payloads, [])
+
+    def test_start_persona_and_switch_between_real_personas(self):
+        self.reply('Recursion is a function calling itself.')
+        self.reply('What is the base case?')
+        output = self.run_cli(['Explain recursion', '/persona reviewer', 'Check me', '/exit'],
+                              load_personas(), 'explainer')
+        self.assertIn('persona: explainer', output)
+        first, second = (payload['messages'] for payload in self.server.payloads)
+        self.assertIn('Persona: Explainer', first[0]['content'])
+        self.assertIn('Persona: Reviewer', second[0]['content'])
+        self.assertEqual(second[1:], first[1:] + [
+            {'role': 'assistant', 'content': 'Recursion is a function calling itself.'},
+            {'role': 'user', 'content': 'Check me'},
+        ])
+
+    def test_persona_list_marks_active(self):
+        output = self.run_cli(['/persona', '/exit'], load_personas(), 'reviewer')
+        self.assertIn('explainer, reviewer (active)', output)
 
 
 if __name__ == '__main__':

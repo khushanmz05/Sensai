@@ -52,6 +52,9 @@ The model is explicitly required on the command line; no model name is hardcoded
 
 - `/exit`: quit
 - `/clear`: clear turns, retain the system prompt
+- `/persona`: list personas; `/persona <id>`: switch persona, keep history
+- `--persona <id>`: start with a persona; personas live in `personas/*.json`
+  (fields `id`, `name`, `tone`, `role`, `scope`; `--persona-dir` to use another folder)
 - Ctrl+C during generation: discard this turn and continue chatting
 - Ctrl+C or EOF at the input prompt: exit cleanly
 
