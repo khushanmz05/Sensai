@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from events.contract import EventStream, to_sse
+from events.store import EventStore
 from persona.registry import PersonaError, load_personas
 
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
@@ -13,6 +14,7 @@ STATIC_DIR = Path(__file__).resolve().parent / 'static'
 app = FastAPI(title='Sensai Web UI (stub)')
 app.state.delay = 0.05  # seconds between fake chunks
 app.state.runs = {}
+app.state.store = EventStore()
 
 class RunRequest(BaseModel):
     message: str
@@ -29,6 +31,17 @@ def list_personas():
     except PersonaError as error:
         raise HTTPException(status_code=500, detail=str(error))
 
+@app.get('/api/metrics')
+def get_metrics():
+    return app.state.store.get_metrics()
+
+@app.get('/api/runs/{run_id}')
+def get_run(run_id: str):
+    run = app.state.store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail='Unknown run.')
+    return run
+
 @app.post('/api/runs')
 def start_run(request: RunRequest):
     message = request.message.strip()
@@ -41,7 +54,11 @@ def start_run(request: RunRequest):
         if persona_id not in personas:
             raise HTTPException(status_code=422, detail=f'Unknown persona {persona_id!r}.')
         persona = personas[persona_id]
-    stream = EventStream()
+    stream = EventStream(on_event=app.state.store.record_event)
+    app.state.store.record_run_metadata(
+        stream.run_id,
+        persona_id=request.persona_id.strip() if request.persona_id and request.persona_id.strip() else None,
+    )
     app.state.runs[stream.run_id] = {
         'stream': stream,
         'message': message,

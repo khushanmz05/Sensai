@@ -36,11 +36,12 @@ def validate_event(event):
     return event
 
 class EventStream:
-    def __init__(self, run_id=None, clock=time.time):
+    def __init__(self, run_id=None, clock=time.time, on_event=None):
         self.run_id = run_id or new_run_id()
         self.sequence = 0
         self.finished = False
         self.clock = clock
+        self.on_event = on_event
 
     def emit(self, type, **payload):
         if self.finished:
@@ -55,6 +56,8 @@ class EventStream:
         self.sequence += 1
         if type == 'done':
             self.finished = True
+        if self.on_event:
+            self.on_event(event)
         return event
 
     def done(self, status):
