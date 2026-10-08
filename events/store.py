@@ -226,6 +226,43 @@ class EventStore:
             'recent_runs': [dict(r) for r in rows[-10:]],
         }
 
+    def get_metrics_by_prompt_version(self, prompt_version: str) -> Dict[str, Any]:
+        with self._lock:
+            rows = self.conn.execute(
+                'SELECT * FROM runs WHERE prompt_version = ?', (prompt_version,)
+            ).fetchall()
+
+        total_runs = len(rows)
+        completed_runs = sum(1 for r in rows if r['status'] == 'completed')
+        failed_runs = sum(1 for r in rows if r['status'] == 'failed')
+        cancelled_runs = sum(1 for r in rows if r['status'] == 'cancelled')
+        total_tokens = sum(r['tokens'] for r in rows)
+
+        completed_latencies = [r['latency_ms'] for r in rows if r['status'] == 'completed']
+        avg_latency = (
+            sum(completed_latencies) / len(completed_latencies)
+            if completed_latencies
+            else 0.0
+        )
+        avg_tokens = (
+            total_tokens / total_runs
+            if total_runs > 0
+            else 0.0
+        )
+        error_rate = (failed_runs / total_runs) if total_runs > 0 else 0.0
+
+        return {
+            'prompt_version': prompt_version,
+            'total_runs': total_runs,
+            'completed_runs': completed_runs,
+            'failed_runs': failed_runs,
+            'cancelled_runs': cancelled_runs,
+            'error_rate': round(error_rate, 4),
+            'total_tokens': total_tokens,
+            'avg_tokens': round(avg_tokens, 2),
+            'avg_latency_ms': round(avg_latency, 2),
+        }
+
     def close(self):
         with self._lock:
             self.conn.close()

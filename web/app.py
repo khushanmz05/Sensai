@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from events.contract import EventStream, to_sse
 from events.store import EventStore
 from persona.registry import PersonaError, load_personas
+from prompts.versioning import PromptError, PromptVersionStore
 
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
 
@@ -15,10 +16,18 @@ app = FastAPI(title='Sensai Web UI (stub)')
 app.state.delay = 0.05  # seconds between fake chunks
 app.state.runs = {}
 app.state.store = EventStore()
+app.state.prompts = PromptVersionStore()
 
 class RunRequest(BaseModel):
     message: str
     persona_id: str | None = None
+
+class CreatePromptRequest(BaseModel):
+    content: str
+    name: str = 'system'
+    author: str = 'user'
+    description: str = ''
+    activate: bool = True
 
 @app.get('/')
 def index():
@@ -30,6 +39,46 @@ def list_personas():
         return list(load_personas().values())
     except PersonaError as error:
         raise HTTPException(status_code=500, detail=str(error))
+
+@app.get('/api/prompts')
+def list_prompts(name: str = 'system'):
+    return app.state.prompts.list_versions(name)
+
+@app.get('/api/prompts/active')
+def get_active_prompt(name: str = 'system'):
+    active = app.state.prompts.get_active_version(name)
+    if not active:
+        raise HTTPException(status_code=404, detail=f'No active prompt for {name!r}.')
+    return active
+
+@app.post('/api/prompts')
+def create_prompt(request: CreatePromptRequest):
+    try:
+        return app.state.prompts.create_version(
+            name=request.name,
+            content=request.content,
+            author=request.author,
+            description=request.description,
+            activate=request.activate,
+        )
+    except PromptError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
+@app.post('/api/prompts/{version_id}/rollback')
+def rollback_prompt(version_id: str, name: str = 'system'):
+    try:
+        return app.state.prompts.rollback(name, version_id)
+    except PromptError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+
+@app.get('/api/prompts/compare')
+def compare_prompts(v1: str, v2: str, name: str = 'system'):
+    try:
+        return app.state.prompts.compare_performance(
+            app.state.store, name=name, version_a=v1, version_b=v2
+        )
+    except PromptError as error:
+        raise HTTPException(status_code=404, detail=str(error))
 
 @app.get('/api/metrics')
 def get_metrics():
@@ -54,10 +103,13 @@ def start_run(request: RunRequest):
         if persona_id not in personas:
             raise HTTPException(status_code=422, detail=f'Unknown persona {persona_id!r}.')
         persona = personas[persona_id]
+    active_prompt = app.state.prompts.get_active_version('system')
+    prompt_version = active_prompt['version_id'] if active_prompt else None
     stream = EventStream(on_event=app.state.store.record_event)
     app.state.store.record_run_metadata(
         stream.run_id,
         persona_id=request.persona_id.strip() if request.persona_id and request.persona_id.strip() else None,
+        prompt_version=prompt_version,
     )
     app.state.runs[stream.run_id] = {
         'stream': stream,
