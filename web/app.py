@@ -68,7 +68,6 @@ class RunRequest(BaseModel):
     session_id: Optional[str] = None
     persona_id: Optional[str] = None
     model: Optional[str] = None
-    host: Optional[str] = None
     mode: Optional[str] = None
 
 
@@ -123,11 +122,6 @@ def list_personas():
 
 
 # --- Sessions (Multi-turn & Persona switches) ---
-
-@app.get('/api/sessions')
-def list_sessions():
-    return [s.to_dict() for s in app.state.sessions.values()]
-
 
 @app.get('/api/sessions/{session_id}')
 def get_session(session_id: str):
@@ -266,7 +260,7 @@ def start_run(request: RunRequest):
     )
 
     mode = request.mode or app.state.mode
-    host = request.host or app.state.ollama_host
+    host = app.state.ollama_host  # fixed server-side; client must not pick the outbound URL
     model = request.model or app.state.default_model
 
     app.state.runs[stream.run_id] = {

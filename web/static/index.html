@@ -51,10 +51,6 @@
       <strong>Model:</strong>
       <input id="model-input" type="text" value="llama3.2:1b" style="width: 110px;">
     </label>
-    <label>
-      <strong>Host:</strong>
-      <input id="host-input" type="text" value="http://localhost:11434" style="width: 170px;">
-    </label>
   </div>
 
   <div class="meta-bar">
@@ -95,7 +91,6 @@
     const budgetStats = document.getElementById('budget-stats');
     const modeSelect = document.getElementById('mode-select');
     const modelInput = document.getElementById('model-input');
-    const hostInput = document.getElementById('host-input');
 
     let currentSource = null;
     let currentRunId = null;
@@ -227,7 +222,6 @@
             persona_id: personaId,
             mode: modeSelect.value,
             model: modelInput.value,
-            host: hostInput.value,
           }),
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);
