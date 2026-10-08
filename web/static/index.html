@@ -3,37 +3,84 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sensai</title>
+  <title>Sensai Web Chat</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-    #log { white-space: pre-wrap; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; min-height: 8rem; }
-    .user { font-weight: bold; margin-top: 1rem; }
-    .error { color: #b00020; }
+    body { font-family: system-ui, sans-serif; max-width: 780px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: .8rem; margin-bottom: 1.5rem; }
+    #log { white-space: pre-wrap; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; min-height: 12rem; max-height: 28rem; overflow-y: auto; background: #fafafa; }
+    .user { font-weight: bold; margin-top: 1rem; color: #0d47a1; }
+    .assistant { margin-top: .4rem; line-height: 1.5; color: #212121; }
+    .sys-note { color: #666; font-style: italic; font-size: .85rem; margin-top: .5rem; }
+    .error { color: #b00020; font-weight: 500; margin-top: .4rem; }
     form { display: flex; gap: .5rem; margin-top: 1rem; }
-    input { flex: 1; padding: .5rem; }
-    #status { color: #666; font-size: .9rem; margin-top: .5rem; }
+    input[type="text"] { flex: 1; padding: .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    button { padding: .6rem 1.2rem; border-radius: 4px; border: 1px solid #ccc; background: #fff; cursor: pointer; font-size: .95rem; font-weight: 500; }
+    button:hover { background: #f0f0f0; }
+    button.primary { background: #0066cc; color: #fff; border-color: #0052a3; }
+    button.primary:hover { background: #0052a3; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .meta-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: .5rem; }
+    .settings-panel { margin-bottom: 1rem; padding: .8rem; background: #f1f3f5; border-radius: 6px; font-size: .85rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .settings-panel label { display: flex; gap: .3rem; align-items: center; }
+    .settings-panel input, .settings-panel select { padding: .3rem .5rem; border: 1px solid #ccc; border-radius: 4px; font-size: .85rem; }
+    #status { color: #666; font-size: .9rem; margin-top: .6rem; }
+    #budget-stats { font-size: .85rem; color: #555; background: #e8f5e9; padding: .3rem .6rem; border-radius: 4px; border: 1px solid #c8e6c9; }
+    .share-box { margin-top: 1rem; padding: .6rem; background: #e3f2fd; border-radius: 4px; font-size: .9rem; display: none; }
   </style>
 </head>
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: .8rem; margin-bottom: 1.5rem;">
-    <h1 style="margin: 0; font-size: 1.6rem;">Sensai</h1>
-    <nav>
-      <a href="/dashboard" style="text-decoration: none; color: #0066cc; font-weight: 500;">Metrics Dashboard (EV3) →</a>
+  <header>
+    <div>
+      <h1 style="margin: 0; font-size: 1.6rem;">Sensai</h1>
+      <small style="color: #666;">Local AI Assistant (X1 & A5)</small>
+    </div>
+    <nav style="display: flex; gap: 1rem; align-items: center;">
+      <a href="/dashboard" style="text-decoration: none; color: #0066cc; font-weight: 500;">Observability Dashboard (EV3) →</a>
     </nav>
+  </header>
+
+  <div class="settings-panel">
+    <label>
+      <strong>Mode:</strong>
+      <select id="mode-select">
+        <option value="stub">Stub / Simulated</option>
+        <option value="ollama">Ollama HTTP API</option>
+      </select>
+    </label>
+    <label>
+      <strong>Model:</strong>
+      <input id="model-input" type="text" value="llama3.2:1b" style="width: 110px;">
+    </label>
+    <label>
+      <strong>Host:</strong>
+      <input id="host-input" type="text" value="http://localhost:11434" style="width: 170px;">
+    </label>
   </div>
-  <div style="margin-bottom: 1rem; display: flex; gap: .5rem; align-items: center;">
-    <label for="persona"><strong>Persona:</strong></label>
-    <select id="persona" style="padding: .4rem; border-radius: 4px; border: 1px solid #ccc;">
-      <option value="">Default (Sensai)</option>
-    </select>
+
+  <div class="meta-bar">
+    <div style="display: flex; gap: .5rem; align-items: center;">
+      <label for="persona"><strong>Persona:</strong></label>
+      <select id="persona" style="padding: .4rem; border-radius: 4px; border: 1px solid #ccc;">
+        <option value="">Default (Sensai)</option>
+      </select>
+      <button id="clear-btn" type="button" style="padding: .4rem .8rem; font-size: .85rem;">Clear Chat</button>
+    </div>
+    <div style="display: flex; gap: .5rem; align-items: center;">
+      <span id="budget-stats">Tokens: 0 | Session: 0</span>
+      <button id="share-btn" type="button" style="padding: .4rem .8rem; font-size: .85rem;">Share Snapshot (X3)</button>
+    </div>
   </div>
+
+  <div id="share-link-box" class="share-box"></div>
   <div id="log"></div>
+
   <form id="form">
-    <input id="message" autocomplete="off" placeholder="Ask something">
-    <button id="send">Send</button>
-    <button id="cancel" type="button" disabled style="padding: .5rem 1rem; border-radius: 4px; border: 1px solid #ccc; background: #fff; cursor: pointer;">Cancel</button>
+    <input id="message" type="text" autocomplete="off" placeholder="Ask Sensai a question...">
+    <button id="send" class="primary">Send</button>
+    <button id="cancel" type="button" disabled>Cancel</button>
   </form>
   <div id="status">Ready.</div>
+
   <script>
     const log = document.getElementById('log');
     const form = document.getElementById('form');
@@ -42,10 +89,23 @@
     const cancel = document.getElementById('cancel');
     const status = document.getElementById('status');
     const personaSelect = document.getElementById('persona');
+    const clearBtn = document.getElementById('clear-btn');
+    const shareBtn = document.getElementById('share-btn');
+    const shareBox = document.getElementById('share-link-box');
+    const budgetStats = document.getElementById('budget-stats');
+    const modeSelect = document.getElementById('mode-select');
+    const modelInput = document.getElementById('model-input');
+    const hostInput = document.getElementById('host-input');
 
     let currentSource = null;
     let currentRunId = null;
+    let sessionId = localStorage.getItem('sensai_session_id') || ('sess_' + Math.random().toString(36).substring(2, 10));
+    localStorage.setItem('sensai_session_id', sessionId);
 
+    let sessionTotalTokens = 0;
+    let currentMessages = [];
+
+    // Load available personas
     fetch('/api/personas')
       .then(res => res.ok ? res.json() : [])
       .then(personas => {
@@ -58,11 +118,66 @@
       })
       .catch(() => {});
 
+    // Persona switch mid-session without losing history (A5)
+    personaSelect.addEventListener('change', async () => {
+      const personaId = personaSelect.value || null;
+      try {
+        await fetch(`/api/sessions/${sessionId}/persona`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({persona_id: personaId}),
+        });
+        const pName = personaSelect.options[personaSelect.selectedIndex].text;
+        addLine('sys-note', `[Switched persona to: ${pName} — conversation history retained]`);
+      } catch (err) {
+        console.error('Failed to update persona:', err);
+      }
+    });
+
+    clearBtn.addEventListener('click', async () => {
+      try {
+        await fetch(`/api/sessions/${sessionId}/clear`, { method: 'POST' });
+        log.innerHTML = '';
+        currentMessages = [];
+        sessionTotalTokens = 0;
+        budgetStats.textContent = 'Tokens: 0 | Session: 0';
+        addLine('sys-note', 'Conversation cleared; system prompt retained.');
+      } catch (err) {
+        console.error('Clear failed:', err);
+      }
+    });
+
+    shareBtn.addEventListener('click', async () => {
+      if (currentMessages.length === 0) {
+        alert('No messages to share yet.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/snapshots', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            title: 'Shared Sensai Session',
+            type: 'conversation',
+            data: { messages: currentMessages },
+          }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const url = window.location.origin + '/p/' + data.snapshot_id;
+        shareBox.style.display = 'block';
+        shareBox.innerHTML = `Public URL (no login required): <a href="${url}" target="_blank">${url}</a> | <a href="/p/${data.snapshot_id}/export?format=md" target="_blank">Export MD</a>`;
+      } catch (err) {
+        alert('Failed to publish snapshot: ' + err.message);
+      }
+    });
+
     function addLine(className, text) {
       const line = document.createElement('div');
       line.className = className;
       line.textContent = text;
       log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
       return line;
     }
 
@@ -96,7 +211,9 @@
       input.value = '';
       send.disabled = true;
       cancel.disabled = false;
+
       addLine('user', 'You: ' + message);
+      currentMessages.push({role: 'user', content: message});
       const reply = addLine('assistant', '');
 
       let runId;
@@ -104,10 +221,18 @@
         const response = await fetch('/api/runs', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({message, persona_id: personaId}),
+          body: JSON.stringify({
+            message,
+            session_id: sessionId,
+            persona_id: personaId,
+            mode: modeSelect.value,
+            model: modelInput.value,
+            host: hostInput.value,
+          }),
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);
-        runId = (await response.json()).run_id;
+        const resData = await response.json();
+        runId = resData.run_id;
       } catch (error) {
         addLine('error', 'Error: ' + error.message);
         return finish('Failed.');
@@ -116,13 +241,26 @@
       currentRunId = runId;
       status.textContent = 'Run ' + runId + ': running';
       currentSource = new EventSource('/api/runs/' + runId + '/events');
+
       currentSource.addEventListener('text_delta', (e) => {
         reply.textContent += JSON.parse(e.data).payload.text;
+        log.scrollTop = log.scrollHeight;
       });
+
+      currentSource.addEventListener('metrics', (e) => {
+        const m = JSON.parse(e.data).payload;
+        sessionTotalTokens += (m.tokens || 0);
+        budgetStats.textContent = `Tokens: ${m.tokens || 0} | Session: ${sessionTotalTokens}`;
+      });
+
       currentSource.addEventListener('done', (e) => {
-        finish('Run ' + runId + ': ' + JSON.parse(e.data).payload.status);
+        const finalStatus = JSON.parse(e.data).payload.status;
+        finish('Run ' + runId + ': ' + finalStatus);
+        if (finalStatus === 'completed' && reply.textContent) {
+          currentMessages.push({role: 'assistant', content: reply.textContent});
+        }
       });
-      // Fires for both server "error" events (with data) and lost connections.
+
       currentSource.onerror = (e) => {
         if (e.data) {
           addLine('error', 'Error: ' + JSON.parse(e.data).payload.message);
