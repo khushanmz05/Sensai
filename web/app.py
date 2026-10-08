@@ -46,22 +46,48 @@ def start_run(request: RunRequest):
         'stream': stream,
         'message': message,
         'persona': persona,
+        'cancelled': False,
+        'streaming': False,
     }
     return {'run_id': stream.run_id}
 
-async def fake_events(stream, message, persona=None):
+@app.post('/api/runs/{run_id}/cancel')
+def cancel_run(run_id: str):
+    run = app.state.runs.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail='Unknown run.')
+    if run['stream'].finished:
+        raise HTTPException(status_code=400, detail='Run already finished.')
+    run['cancelled'] = True
+    return {'run_id': run_id, 'status': 'cancelled'}
+
+async def fake_events(run):
+    stream = run['stream']
+    message = run['message']
+    persona = run.get('persona')
     prefix = f'[{persona["name"]}] ' if persona else ''
     words = f'{prefix}Stub reply to: {message}'.split(' ')
-    for index, word in enumerate(words):
-        await asyncio.sleep(app.state.delay)
-        yield to_sse(stream.emit('text_delta', text=word if index == 0 else ' ' + word))
-    yield to_sse(stream.emit('metrics', tokens=len(words), latency_ms=0))
-    yield to_sse(stream.done('completed'))
+    try:
+        for index, word in enumerate(words):
+            if run.get('cancelled'):
+                break
+            await asyncio.sleep(app.state.delay)
+            if run.get('cancelled'):
+                break
+            yield to_sse(stream.emit('text_delta', text=word if index == 0 else ' ' + word))
+        if run.get('cancelled'):
+            yield to_sse(stream.done('cancelled'))
+        else:
+            yield to_sse(stream.emit('metrics', tokens=len(words), latency_ms=0))
+            yield to_sse(stream.done('completed'))
+    finally:
+        app.state.runs.pop(stream.run_id, None)
 
 @app.get('/api/runs/{run_id}/events')
 def run_events(run_id: str):
-    run = app.state.runs.pop(run_id, None)
-    if run is None:
+    run = app.state.runs.get(run_id)
+    if run is None or run.get('streaming'):
         raise HTTPException(status_code=404, detail='Unknown run.')
-    return StreamingResponse(fake_events(run['stream'], run['message'], run.get('persona')),
+    run['streaming'] = True
+    return StreamingResponse(fake_events(run),
         media_type='text/event-stream', headers={'Cache-Control': 'no-cache'})
