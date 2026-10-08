@@ -64,10 +64,13 @@ def stream_reply(base_url, model, messages, timeout):
         raise ChatError(f'HTTP request failed: {error}') from error
 
 
-def run_chat(model, system_prompt, host, timeout, personas=None):
+def run_chat(model, system_prompt, host, timeout, personas=None, active=None):
     personas = personas or {}
     history = [{'role': 'system', 'content': system_prompt}]
-    print(f'Sensai | model: {model} | /exit to quit, /clear to reset, /persona to switch')
+    if active is not None:
+        history[0]['content'] = persona_prompt(system_prompt, personas[active])
+    print(f'Sensai | model: {model} | persona: {active or "none"} '
+          f'| /exit to quit, /clear to reset, /persona to switch')
     while True:
         try:
             user_text = input('\nYou> ').strip()
@@ -83,12 +86,15 @@ def run_chat(model, system_prompt, host, timeout, personas=None):
         if user_text == '/persona' or user_text.startswith('/persona '):
             persona_id = user_text[len('/persona'):].strip()
             if not persona_id:
-                print('Personas: ' + (', '.join(personas) or 'none available'))
+                print('Personas: ' + (', '.join(
+                    key + (' (active)' if key == active else '') for key in personas
+                ) or 'none available'))
             elif persona_id not in personas:
                 print(f'Unknown persona {persona_id!r}. Type /persona to list them.')
             else:
                 history[0] = {'role': 'system',
                     'content': persona_prompt(system_prompt, personas[persona_id])}
+                active = persona_id
                 print(f'Persona switched to {personas[persona_id]["name"]}; history kept.')
             continue
         if not user_text:
@@ -133,6 +139,9 @@ def main():
     parser.add_argument('--host', default='http://localhost:11434')
     parser.add_argument('--timeout', type=positive_timeout, default=120,
                         help='read inactivity timeout in seconds (default: 120)')
+    parser.add_argument('--persona', help='persona id to start with (see /persona)')
+    parser.add_argument('--persona-dir', type=Path,
+                        default=Path(__file__).resolve().parent / 'personas')
     args = parser.parse_args()
     if not args.model.strip():
         parser.error('--model cannot be empty')
@@ -144,11 +153,15 @@ def main():
         print(f'Cannot load system prompt: {error}', file=sys.stderr)
         return 1
     try:
-        personas = load_personas()
+        personas = load_personas(args.persona_dir)
     except PersonaError as error:
         print(f'Cannot load personas: {error}', file=sys.stderr)
         return 1
-    return run_chat(args.model, prompt, args.host, args.timeout, personas)
+    if args.persona is not None and args.persona not in personas:
+        print(f'Unknown persona {args.persona!r}. Available: {", ".join(personas)}',
+              file=sys.stderr)
+        return 1
+    return run_chat(args.model, prompt, args.host, args.timeout, personas, args.persona)
 
 
 if __name__ == '__main__':
