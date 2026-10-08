@@ -16,6 +16,12 @@
 </head>
 <body>
   <h1>Sensai</h1>
+  <div style="margin-bottom: 1rem; display: flex; gap: .5rem; align-items: center;">
+    <label for="persona"><strong>Persona:</strong></label>
+    <select id="persona" style="padding: .4rem; border-radius: 4px; border: 1px solid #ccc;">
+      <option value="">Default (Sensai)</option>
+    </select>
+  </div>
   <div id="log"></div>
   <form id="form">
     <input id="message" autocomplete="off" placeholder="Ask something">
@@ -28,6 +34,19 @@
     const input = document.getElementById('message');
     const send = document.getElementById('send');
     const status = document.getElementById('status');
+    const personaSelect = document.getElementById('persona');
+
+    fetch('/api/personas')
+      .then(res => res.ok ? res.json() : [])
+      .then(personas => {
+        personas.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = `${p.name} (${p.role})`;
+          personaSelect.appendChild(opt);
+        });
+      })
+      .catch(() => {});
 
     function addLine(className, text) {
       const line = document.createElement('div');
@@ -46,6 +65,7 @@
       event.preventDefault();
       const message = input.value.trim();
       if (!message) return;
+      const personaId = personaSelect.value || null;
       input.value = '';
       send.disabled = true;
       addLine('user', 'You: ' + message);
@@ -56,7 +76,7 @@
         const response = await fetch('/api/runs', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({message}),
+          body: JSON.stringify({message, persona_id: personaId}),
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         runId = (await response.json()).run_id;
