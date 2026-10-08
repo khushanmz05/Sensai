@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sensai — Observability & Metrics Dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; color: #333; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    nav a { margin-left: 1rem; text-decoration: none; color: #0066cc; font-weight: 500; }
+    nav a:hover { text-decoration: underline; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 1rem; text-align: center; }
+    .card .value { font-size: 1.8rem; font-weight: bold; margin-top: .5rem; }
+    .card .label { font-size: .85rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+    .card.error .value { color: #d32f2f; }
+    .card.success .value { color: #2e7d32; }
+    section { margin-bottom: 2.5rem; }
+    h2 { font-size: 1.25rem; border-bottom: 1px solid #ddd; padding-bottom: .4rem; margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
+    th, td { padding: .6rem; text-align: left; border-bottom: 1px solid #eee; font-size: .9rem; }
+    th { background: #f1f3f5; font-weight: 600; }
+    .badge { display: inline-block; padding: .2rem .5rem; border-radius: 4px; font-size: .75rem; font-weight: bold; text-transform: uppercase; }
+    .badge.completed { background: #e8f5e9; color: #2e7d32; }
+    .badge.running { background: #e3f2fd; color: #1976d2; }
+    .badge.failed { background: #ffebee; color: #c62828; }
+    .badge.cancelled { background: #fff3e0; color: #ef6c00; }
+    .diff-box { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: .85rem; white-space: pre-wrap; overflow-x: auto; }
+    .btn { padding: .4rem .8rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: .85rem; }
+    .btn:hover { background: #f0f0f0; }
+    .btn-primary { background: #0066cc; color: #fff; border-color: #0052a3; }
+    .btn-primary:hover { background: #0052a3; }
+    select { padding: .4rem; border-radius: 4px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1 style="margin: 0; font-size: 1.6rem;">Sensai Dashboard</h1>
+      <small style="color: #666;">Logging & Performance Monitoring (EV3)</small>
+    </div>
+    <nav>
+      <a href="/">← Chat</a>
+      <button id="refresh-btn" class="btn" style="margin-left: 1rem;">Refresh</button>
+    </nav>
+  </header>
+
+  <section>
+    <h2>Performance & Reliability Overview</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="label">Total Runs</div>
+        <div class="value" id="total-runs">0</div>
+      </div>
+      <div class="card success">
+        <div class="label">Completed</div>
+        <div class="value" id="completed-runs">0</div>
+      </div>
+      <div class="card error">
+        <div class="label">Failed</div>
+        <div class="value" id="failed-runs">0</div>
+      </div>
+      <div class="card">
+        <div class="label">Error Rate</div>
+        <div class="value" id="error-rate">0%</div>
+      </div>
+      <div class="card">
+        <div class="label">Cancelled</div>
+        <div class="value" id="cancelled-runs">0</div>
+      </div>
+      <div class="card">
+        <div class="label">Avg Latency</div>
+        <div class="value" id="avg-latency">0ms</div>
+      </div>
+      <div class="card">
+        <div class="label">Total Tokens</div>
+        <div class="value" id="total-tokens">0</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Recent Runs</h2>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Run ID</th>
+            <th>Persona</th>
+            <th>Prompt Ver</th>
+            <th>Status</th>
+            <th>Tokens</th>
+            <th>Latency</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="runs-table-body">
+          <tr><td colspan="7" style="text-align: center; color: #999;">Loading runs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Prompt Version Comparison (A4 / EV3)</h2>
+    <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+      <label>Version A: <select id="cmp-v1"></select></label>
+      <label>Version B: <select id="cmp-v2"></select></label>
+      <button id="btn-compare" class="btn btn-primary">Compare Prompts</button>
+    </div>
+    <div id="compare-result" style="display: none;">
+      <div class="grid" style="margin-bottom: 1rem;">
+        <div class="card"><div class="label">Latency Diff</div><div class="value" id="diff-latency">0ms</div></div>
+        <div class="card"><div class="label">Token Diff</div><div class="value" id="diff-tokens">0</div></div>
+        <div class="card"><div class="label">Error Rate Diff</div><div class="value" id="diff-error">0%</div></div>
+      </div>
+      <div class="diff-box" id="diff-text"></div>
+    </div>
+  </section>
+
+  <div id="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+    <div style="background: #fff; width: 650px; max-width: 90%; max-height: 80vh; border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 id="modal-title" style="margin: 0;">Run Event Timeline</h3>
+        <button id="modal-close" class="btn">&times;</button>
+      </div>
+      <div id="modal-events" style="overflow-y: auto; flex: 1; font-family: monospace; font-size: .85rem;"></div>
+    </div>
+  </div>
+
+  <script>
+    async function loadMetrics() {
+      try {
+        const res = await fetch('/api/metrics');
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('total-runs').textContent = data.total_runs;
+        document.getElementById('completed-runs').textContent = data.completed_runs;
+        document.getElementById('failed-runs').textContent = data.failed_runs;
+        document.getElementById('error-rate').textContent = (data.error_rate * 100).toFixed(1) + '%';
+        document.getElementById('cancelled-runs').textContent = data.cancelled_runs;
+        document.getElementById('avg-latency').textContent = data.avg_latency_ms.toFixed(0) + 'ms';
+        document.getElementById('total-tokens').textContent = data.total_tokens;
+
+        const tbody = document.getElementById('runs-table-body');
+        tbody.innerHTML = '';
+        if (!data.recent_runs || data.recent_runs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">No recorded runs yet.</td></tr>';
+          return;
+        }
+
+        data.recent_runs.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><code>${r.run_id.substring(0, 8)}...</code></td>
+            <td>${r.persona_id || '<em>default</em>'}</td>
+            <td><code>${r.prompt_version || 'v1'}</code></td>
+            <td><span class="badge ${r.status}">${r.status}</span></td>
+            <td>${r.tokens}</td>
+            <td>${r.latency_ms ? r.latency_ms.toFixed(0) + 'ms' : '-'}</td>
+            <td><button class="btn view-events-btn" data-id="${r.run_id}">Inspect</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        document.querySelectorAll('.view-events-btn').forEach(btn => {
+          btn.addEventListener('click', () => showRunEvents(btn.dataset.id));
+        });
+      } catch (err) {
+        console.error('Failed to load metrics:', err);
+      }
+    }
+
+    async function loadPrompts() {
+      try {
+        const res = await fetch('/api/prompts');
+        if (!res.ok) return;
+        const prompts = await res.json();
+        const v1Select = document.getElementById('cmp-v1');
+        const v2Select = document.getElementById('cmp-v2');
+        v1Select.innerHTML = '';
+        v2Select.innerHTML = '';
+        prompts.forEach((p, idx) => {
+          const opt1 = new Option(`${p.version_id} (${p.description || p.author})`, p.version_id);
+          const opt2 = new Option(`${p.version_id} (${p.description || p.author})`, p.version_id);
+          v1Select.add(opt1);
+          v2Select.add(opt2);
+        });
+        if (prompts.length > 1) {
+          v2Select.selectedIndex = prompts.length - 1;
+        }
+      } catch (err) {
+        console.error('Failed to load prompts:', err);
+      }
+    }
+
+    document.getElementById('btn-compare').addEventListener('click', async () => {
+      const v1 = document.getElementById('cmp-v1').value;
+      const v2 = document.getElementById('cmp-v2').value;
+      if (!v1 || !v2) return;
+      try {
+        const res = await fetch(`/api/prompts/compare?v1=${v1}&v2=${v2}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('compare-result').style.display = 'block';
+        document.getElementById('diff-latency').textContent = (data.comparison.latency_diff_ms >= 0 ? '+' : '') + data.comparison.latency_diff_ms + 'ms';
+        document.getElementById('diff-tokens').textContent = (data.comparison.token_diff >= 0 ? '+' : '') + data.comparison.token_diff;
+        document.getElementById('diff-error').textContent = (data.comparison.error_rate_diff * 100).toFixed(1) + '%';
+        document.getElementById('diff-text').textContent = data.diff.diff || '(No text differences)';
+      } catch (err) {
+        console.error('Comparison error:', err);
+      }
+    });
+
+    async function showRunEvents(runId) {
+      const modal = document.getElementById('modal');
+      const container = document.getElementById('modal-events');
+      document.getElementById('modal-title').textContent = 'Run ' + runId;
+      container.innerHTML = 'Loading events...';
+      modal.style.display = 'flex';
+      try {
+        const res = await fetch('/api/runs/' + runId + '/history');
+        if (!res.ok) {
+          container.innerHTML = '<span style="color:red">No events found.</span>';
+          return;
+        }
+        const events = await res.json();
+        container.innerHTML = events.map(e => `
+          <div style="border-bottom: 1px solid #eee; padding: .4rem 0;">
+            <strong>[seq ${e.sequence}] ${e.type}</strong> (${new Date(e.timestamp * 1000).toLocaleTimeString()})<br>
+            <pre style="margin: .2rem 0; white-space: pre-wrap; color: #555;">${JSON.stringify(e.payload, null, 2)}</pre>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = '<span style="color:red">Error loading events.</span>';
+      }
+    }
+
+    document.getElementById('modal-close').addEventListener('click', () => {
+      document.getElementById('modal').style.display = 'none';
+    });
+
+    document.getElementById('refresh-btn').addEventListener('click', () => {
+      loadMetrics();
+      loadPrompts();
+    });
+
+    loadMetrics();
+    loadPrompts();
+  </script>
+</body>
+</html>
+

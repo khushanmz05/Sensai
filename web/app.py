@@ -33,6 +33,10 @@ class CreatePromptRequest(BaseModel):
 def index():
     return FileResponse(STATIC_DIR / 'index.html')
 
+@app.get('/dashboard')
+def dashboard():
+    return FileResponse(STATIC_DIR / 'dashboard.html')
+
 @app.get('/api/personas')
 def list_personas():
     try:
@@ -90,6 +94,13 @@ def get_run(run_id: str):
     if run is None:
         raise HTTPException(status_code=404, detail='Unknown run.')
     return run
+
+@app.get('/api/runs/{run_id}/history')
+def get_run_history(run_id: str):
+    events = app.state.store.get_events(run_id)
+    if not events:
+        raise HTTPException(status_code=404, detail='No events for this run.')
+    return events
 
 @app.post('/api/runs')
 def start_run(request: RunRequest):
