@@ -202,7 +202,10 @@ Owner: B. First integration target: week 1–2.
 
 As a developer using Sensai, I want to save a result to an allowed folder, so that I can obtain a file without changing unrelated data.
 
-Status: planned. The current T4 increment exposes no write/create operations.
+Current increment: `--allow-create` enables `/save <new-relative-path>` in the CLI.
+The last complete answer is previewed and saved only after `yes`. Existing files
+are never overwritten; path/size rules still apply. Editing existing files and
+model-selected tool calls remain pending. See FILE_ACCESS.md.
 
 Acceptance criteria:
 - The scenario "save a result to an allowed folder" works through the shared backend with real data, without substituting a mock result.
@@ -329,6 +332,10 @@ Owner: A. First integration target: week 4.
 
 ## A3-1 — Approve a file modification
 
+Current increment: approval applies to creating a new file with `/save`.
+The immutable preview binds the destination and content to a one-use decision.
+Editing existing files and approvals for other tools remain planned.
+
 As a developer using Sensai, I want to approve a file modification, so that I can control changes to my project.
 
 Acceptance criteria:
@@ -339,6 +346,10 @@ Acceptance criteria:
 Owner: B. First integration target: week 2.
 
 ## A3-2 — Reject an unwanted action
+
+Current increment: any confirmation response other than `yes`, EOF or Ctrl+C
+cancels the pending CLI save without creating a file. Approval is not inferred
+from model text and cannot be reused for another path or content.
 
 As a developer using Sensai, I want to reject an unwanted action, so that I can preserve the original project state.
 

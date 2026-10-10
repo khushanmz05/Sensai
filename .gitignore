@@ -5,3 +5,4 @@
 /.venv-wsl/
 __pycache__/
 *.py[cod]
+/local-output/

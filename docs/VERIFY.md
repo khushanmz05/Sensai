@@ -1,6 +1,45 @@
 # Verification
 
-## T4 read-only increment: 10 October 2026
+## T4 creation and initial A3 approval: 10 October 2026
+
+`python -m unittest discover -s tests -v` passed **97 tests** in 10.176 seconds
+in WSL, with no skips. The prior 68 tests passed alongside 17 new creation-policy
+checks and 12 CLI approval checks. Coverage includes rejected/expired decisions,
+exact UTF-8 content, no-overwrite races, changed directories, temporary-file cleanup
+after a flush failure, invalid/partial answers and model text that says `yes`.
+
+An agent-run demonstration used local `llama3.2:1b`, `schemas/plan.json` and a
+temporary workspace. Scripted CLI input exercised both confirmation outcomes:
+
+1. The model returned a valid two-step JSON plan.
+2. `/save cancelled.json` followed by `no` created no file.
+3. `/save answer.json` followed by `yes` created the 187-byte JSON response.
+4. Another `/save answer.json` was refused without overwriting it.
+5. `/read answer.json` successfully loaded the saved content.
+
+The saved JSON was parsed, the rejected path was confirmed absent, and no temporary
+save files remained. The demonstration workspace was removed afterward. These
+scripted checks do not substitute for a user's own manual approval demonstration.
+Existing-file editing, model-selected tools, persistent approvals and web approval
+are still pending; neither full T4 nor general A3 is claimed complete.
+
+### User-reported manual save checks
+
+The user supplied terminal output from WSL with `--workspace local-output
+--allow-create` and `llama3.2:1b`:
+
+- `/save answer.md` followed by `yes` reported creation of an 845-byte file.
+- A second save also received `yes`, so it correctly created another file; a
+  subsequent request answered with `no` reported cancellation without creation.
+- Another `/save answer.md` reported that the target exists and overwriting
+  is not allowed.
+
+These outputs confirm the manual CLI paths for approval, rejection and overwrite
+refusal. The model's explanation mixed languages; response quality is a separate
+limitation and is not validated by the save operation. Generated answers remain
+in the Git-ignored local-output directory.
+
+## Previous T4 read-only increment: 10 October 2026
 
 In the user's WSL working copy, `python -m unittest discover -s tests -v` passed
 **68 tests** in 10.129 seconds, with no skips. This includes the prior 43 tests,
@@ -21,7 +60,7 @@ This validates one real-model integration example, not general model quality or
 prompt-injection resistance. Full T4 remains incomplete: write/create operations,
 model-selected tool calls and shared web integration are pending. See FILE_ACCESS.md.
 
-## Current working copy: 10 October 2026
+## Previous T5 increment: 10 October 2026
 
 `python -m unittest discover -s tests -v`: **43 tests passed** (10.238 seconds).
 The original 27 checks still pass; 16 new checks cover the T5 increment.

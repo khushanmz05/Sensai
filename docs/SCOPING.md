@@ -22,9 +22,10 @@ sources and a final document into one repeatable workflow. Sensai uses one share
 an initial CLI integration with schema validation and bounded retries. Both CLI
 examples passed in user-reported real-model runs; broader acceptance remains pending. R1 has chunking only; X1 streams simulated responses using
 the event contract. The other features below are planned. See VERIFY.md for tests.
-T4 has a read-only CLI increment: an explicit workspace, bounded text reads and
-file context. Writes/creation, model-selected file tools and shared web integration
-remain planned; T4 is not fully accepted.
+T4 has CLI workspace reads and opt-in creation of new files. The initial A3 path
+previews the save and requires explicit human confirmation. Editing existing files,
+model-selected tools, general action approval and shared web integration remain
+planned; T4 and A3 are not fully accepted.
 The current collaborator has chosen member B; other member names are unconfirmed.
 
 Assignment constraints: Python 3.10+; all model calls must use the Ollama HTTP API directly,

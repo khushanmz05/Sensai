@@ -3,7 +3,8 @@
 Python 3.10+ CLI chatbot using the Ollama HTTP API directly. No LLM framework or Ollama SDK.
 This working copy includes the CLI chat, personas (A5), and a first CLI-integrated
 structured-output increment (T5). RAG chunking and the web UI are early prototypes.
-T4 now has an opt-in, read-only file context increment for Linux/WSL.
+T4 provides opt-in file context and creation of new files for Linux/WSL.
+The first A3 increment previews each save and requires explicit confirmation.
 It does not implement the full Sensai feature catalogue.
 
 ## Setup (Linux / WSL)
@@ -113,6 +114,7 @@ See the examples above and `docs/VERIFY.md` for manual checks and recorded resul
 - `schemas/`: example plan and task-extraction schemas
 - `tests/test_structured.py`: validation and retry boundary checks
 - `file_access/reader.py`: bounded reads beneath an explicit workspace root
+- `file_access/writer.py`: immutable save previews and approved create-only writes
 - `docs/FILE_ACCESS.md`: T4 behavior, permission boundaries and manual checks
 - `tests/test_chatbot.py`: local HTTP contract and error tests
 - `docs/SCOPING.md`: full 28-feature scope, architecture, ownership and six-week plan for four members
@@ -122,8 +124,8 @@ See the examples above and `docs/VERIFY.md` for manual checks and recorded resul
 
 `main()` loads configuration and the prompt. `run_chat()` owns history and terminal IO.
 `stream_reply()` sends the message list and yields response text without managing history.
-File access currently supports explicitly requested, read-only context in the CLI.
-There is no persistence, full RAG pipeline, file writing or code execution yet.
+File access supports explicitly requested context and confirmed creation in the CLI.
+There is no persistence, full RAG pipeline, existing-file editing or code execution yet.
 
 ## Read a project file (T4 first increment, Linux/WSL)
 
@@ -145,11 +147,29 @@ Python and SQLite. The traversal command must be rejected without a model call.
 Paths are relative to `--workspace`; omit `--workspace` to disable file access.
 Only `.txt`, `.md`, `.py` and `.json` UTF-8 files up to 16 KiB are allowed.
 Absolute paths, `..`, hidden paths, symbolic links and hard-linked files are denied.
-File writes and model-initiated tool calls are not implemented in this increment.
+Creation requires the additional `--allow-create` flag described below.
+Model-initiated tool calls are not implemented in this increment.
 
 T4 also works with `--json-schema schemas/tasks.json`. Read `project_notes.md`,
 then ask to extract the two tasks. Use `/clear` to discard all conversation and
 pending file context. More details are in `docs/FILE_ACCESS.md`.
+
+## Save an answer after confirmation (T4 / initial A3)
+
+```bash
+mkdir -p local-output
+python chatbot.py --model llama3.2:1b --workspace local-output --allow-create
+```
+
+Ask a question, wait for its completed answer, then enter `/save answer.md`.
+The CLI displays the exact path, UTF-8 byte count and full content preview. Type
+`yes` to create the file; any other input, EOF or Ctrl+C cancels without creating it.
+The `local-output/` folder is ignored by Git. To read the result, use `/read answer.md`.
+
+Existing files, including symbolic links, cannot be overwritten. Only `.txt`, `.md`,
+`.py` and `.json` files up to 16 KiB are allowed. Parent directories must already exist.
+This is a synchronous CLI approval for creating a new file, not general agent approval,
+editing, scheduling or publication. The model cannot approve its own output.
 
 ## Tests
 
