@@ -1,8 +1,9 @@
-# Sensai bootstrap
+# Sensai
 
 Python 3.10+ CLI chatbot using the Ollama HTTP API directly. No LLM framework or Ollama SDK.
-This working copy includes the bootstrap, CLI personas (A5), and a first CLI-integrated
+This working copy includes the CLI chat, personas (A5), and a first CLI-integrated
 structured-output increment (T5). RAG chunking and the web UI are early prototypes.
+T4 now has an opt-in, read-only file context increment for Linux/WSL.
 It does not implement the full Sensai feature catalogue.
 
 ## Setup (Linux / WSL)
@@ -111,6 +112,8 @@ See the examples above and `docs/VERIFY.md` for manual checks and recorded resul
 - `structured/output.py`: reusable JSON validation and bounded correction loop
 - `schemas/`: example plan and task-extraction schemas
 - `tests/test_structured.py`: validation and retry boundary checks
+- `file_access/reader.py`: bounded reads beneath an explicit workspace root
+- `docs/FILE_ACCESS.md`: T4 behavior, permission boundaries and manual checks
 - `tests/test_chatbot.py`: local HTTP contract and error tests
 - `docs/SCOPING.md`: full 28-feature scope, architecture, ownership and six-week plan for four members
 - `docs/USER_STORIES.md`: stories and observable acceptance criteria
@@ -119,7 +122,34 @@ See the examples above and `docs/VERIFY.md` for manual checks and recorded resul
 
 `main()` loads configuration and the prompt. `run_chat()` owns history and terminal IO.
 `stream_reply()` sends the message list and yields response text without managing history.
-There is no file access tool, persistence, RAG or code execution in this bootstrap.
+File access currently supports explicitly requested, read-only context in the CLI.
+There is no persistence, full RAG pipeline, file writing or code execution yet.
+
+## Read a project file (T4 first increment, Linux/WSL)
+
+```bash
+python chatbot.py --model llama3.2:1b --workspace examples
+```
+
+Then enter each line in the chat:
+
+```text
+/read project_notes.md
+Which language and database does this project use?
+/read ../README.md
+/exit
+```
+
+The first command queues one file for the next question. The expected answer is
+Python and SQLite. The traversal command must be rejected without a model call.
+Paths are relative to `--workspace`; omit `--workspace` to disable file access.
+Only `.txt`, `.md`, `.py` and `.json` UTF-8 files up to 16 KiB are allowed.
+Absolute paths, `..`, hidden paths, symbolic links and hard-linked files are denied.
+File writes and model-initiated tool calls are not implemented in this increment.
+
+T4 also works with `--json-schema schemas/tasks.json`. Read `project_notes.md`,
+then ask to extract the two tasks. Use `/clear` to discard all conversation and
+pending file context. More details are in `docs/FILE_ACCESS.md`.
 
 ## Tests
 

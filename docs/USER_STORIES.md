@@ -185,6 +185,12 @@ Owner: B. First integration target: week 2.
 
 As a developer using Sensai, I want to read files from the selected project, so that I can inspect source code within permitted boundaries.
 
+Current increment: `--workspace` explicitly enables read-only access; `/read`
+queues a bounded UTF-8 file for the next question. Paths outside the selected root,
+hidden paths, symlinks, hard links and non-text/oversized files are rejected.
+CLI integration is implemented; model-selected tool calls and web integration
+remain pending. See FILE_ACCESS.md for reproducible checks.
+
 Acceptance criteria:
 - The scenario "read files from the selected project" works through the shared backend with real data, without substituting a mock result.
 - Check allowed roots and operation permissions before every read, create or edit; block traversal through .. and symlinks while allowing authorized operations.
@@ -195,6 +201,8 @@ Owner: B. First integration target: week 1–2.
 ## T4-2 — Save a result to an allowed folder
 
 As a developer using Sensai, I want to save a result to an allowed folder, so that I can obtain a file without changing unrelated data.
+
+Status: planned. The current T4 increment exposes no write/create operations.
 
 Acceptance criteria:
 - The scenario "save a result to an allowed folder" works through the shared backend with real data, without substituting a mock result.

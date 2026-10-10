@@ -1,5 +1,26 @@
 # Verification
 
+## T4 read-only increment: 10 October 2026
+
+In the user's WSL working copy, `python -m unittest discover -s tests -v` passed
+**68 tests** in 10.129 seconds, with no skips. This includes the prior 43 tests,
+16 file-access boundary checks and 9 CLI file-context checks. `git diff --check`
+also passed. Tests include directory replacement, symbolic/hard links, traversal,
+file growth after the size check, FIFO handling, context clearing and T5 integration.
+
+A direct agent-run CLI demonstration on the installed `llama3.2:1b` used
+`--workspace examples --json-schema schemas/tasks.json`:
+
+1. `/read ../README.md` was rejected by the path policy.
+2. `/read project_notes.md` loaded the 232-byte sample file.
+3. A request to extract the two tasks returned `Add a login screen (high priority)`
+   with `high`, and `Update the README (low priority)` with `low`.
+4. T5 schema validation passed and the chat exited normally.
+
+This validates one real-model integration example, not general model quality or
+prompt-injection resistance. Full T4 remains incomplete: write/create operations,
+model-selected tool calls and shared web integration are pending. See FILE_ACCESS.md.
+
 ## Current working copy: 10 October 2026
 
 `python -m unittest discover -s tests -v`: **43 tests passed** (10.238 seconds).
