@@ -9,18 +9,23 @@ import sys
 import requests
 
 from persona.registry import PersonaError, load_personas, persona_prompt
+from structured.output import JsonOutput, StructuredOutputError
 
 
 class ChatError(Exception):
     """An error that can be explained without a traceback."""
 
 
-def stream_reply(base_url, model, messages, timeout):
+def stream_reply(base_url, model, messages, timeout, schema=None):
     """Yield NDJSON content chunks; require the final done marker."""
+    payload = {'model': model, 'messages': messages, 'stream': True}
+    if schema is not None:
+        payload['format'] = schema
+        payload['options'] = {'temperature': 0}
     try:
         with requests.post(
             base_url.rstrip('/') + '/api/chat',
-            json={'model': model, 'messages': messages, 'stream': True},
+            json=payload,
             stream=True,
             timeout=(5, timeout),
         ) as response:
@@ -64,13 +69,16 @@ def stream_reply(base_url, model, messages, timeout):
         raise ChatError(f'HTTP request failed: {error}') from error
 
 
-def run_chat(model, system_prompt, host, timeout, personas=None, active=None):
+def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
+             json_output=None, json_attempts=2):
     personas = personas or {}
     history = [{'role': 'system', 'content': system_prompt}]
     if active is not None:
         history[0]['content'] = persona_prompt(system_prompt, personas[active])
     print(f'Sensai | model: {model} | persona: {active or "none"} '
           f'| /exit to quit, /clear to reset, /persona to switch')
+    if json_output is not None:
+        print('JSON mode: responses are displayed only after schema validation.')
     while True:
         try:
             user_text = input('\nYou> ').strip()
@@ -106,15 +114,25 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None):
         parts = []
         print('Sensai> ', end='', flush=True)
         try:
-            for chunk in stream_reply(host, model, pending, timeout):
-                print(chunk, end='', flush=True)
-                parts.append(chunk)
+            if json_output is not None:
+                result = json_output.generate(
+                    pending,
+                    lambda messages, schema: stream_reply(host, model, messages, timeout, schema),
+                    max_attempts=json_attempts,
+                )
+                text = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
+                print(text, end='', flush=True)
+                parts.append(text)
+            else:
+                for chunk in stream_reply(host, model, pending, timeout):
+                    print(chunk, end='', flush=True)
+                    parts.append(chunk)
             if not ''.join(parts).strip():
                 raise ChatError('The model returned no answer. Try a different model.')
         except KeyboardInterrupt:
             print('\nGeneration cancelled; this turn was not saved.')
             continue
-        except ChatError as error:
+        except (ChatError, StructuredOutputError) as error:
             print(f'\nError: {error}\nThis turn was not saved.', file=sys.stderr)
             continue
         print()
@@ -142,9 +160,18 @@ def main():
     parser.add_argument('--persona', help='persona id to start with (see /persona)')
     parser.add_argument('--persona-dir', type=Path,
                         default=Path(__file__).resolve().parent / 'personas')
+    parser.add_argument('--json-schema', type=Path,
+                        help='validate responses against an inline JSON Schema file')
+    parser.add_argument('--json-attempts', type=int, choices=range(1, 6), default=2,
+                        help='total generation attempts per JSON answer (default: 2)')
     args = parser.parse_args()
     if not args.model.strip():
         parser.error('--model cannot be empty')
+    try:
+        json_output = JsonOutput.from_file(args.json_schema) if args.json_schema else None
+    except StructuredOutputError as error:
+        print(f'Cannot configure JSON mode: {error}', file=sys.stderr)
+        return 1
     try:
         prompt = args.system_prompt.read_text(encoding='utf-8').strip()
         if not prompt:
@@ -161,7 +188,8 @@ def main():
         print(f'Unknown persona {args.persona!r}. Available: {", ".join(personas)}',
               file=sys.stderr)
         return 1
-    return run_chat(args.model, prompt, args.host, args.timeout, personas, args.persona)
+    return run_chat(args.model, prompt, args.host, args.timeout, personas, args.persona,
+                    json_output, args.json_attempts)
 
 
 if __name__ == '__main__':

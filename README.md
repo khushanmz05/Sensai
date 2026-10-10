@@ -1,7 +1,9 @@
 # Sensai bootstrap
 
 Python 3.10+ CLI chatbot using the Ollama HTTP API directly. No LLM framework or Ollama SDK.
-This submission implements the bootstrap, not the full Sensai feature catalogue.
+This working copy includes the bootstrap, CLI personas (A5), and a first CLI-integrated
+structured-output increment (T5). RAG chunking and the web UI are early prototypes.
+It does not implement the full Sensai feature catalogue.
 
 ## Setup (Linux / WSL)
 
@@ -75,11 +77,40 @@ empty answers and streams that end without a completion marker.
 Only a complete question/answer pair is committed to history. Partial visible output
 is not reused after an error. All model calls use `POST /api/chat` directly.
 
+## Structured JSON output (T5, member B)
+
+Install the updated requirements, then run from the project directory:
+
+```bash
+python3 chatbot.py --model llama3.2:1b --json-schema schemas/plan.json
+python3 chatbot.py --model llama3.2:1b --json-schema schemas/tasks.json --json-attempts 2
+```
+
+For the first example, ask `Make a three-step plan to learn Python functions`.
+For the second, ask `Extract tasks: fix login (high priority), update README (low priority)`.
+The model must return the structure declared in the selected file. The schema is
+sent through Ollama's `format` field and checked locally with `jsonschema`.
+
+JSON responses are buffered until complete and valid; ordinary chat still streams.
+Invalid content gets at most two total attempts by default (configurable from 1 to 5).
+Rejected output and retry instructions never enter conversation history. Transport
+errors and cancellation are not retried. After exhaustion, the chat remains usable.
+
+This increment accepts draft 2020-12 inline schemas with a top-level object and no
+`$ref`/`$dynamicRef` references. `format` annotations (such as email) are not asserted.
+Validation verifies structure, not factual accuracy or permission to execute an action.
+Both CLI examples passed on the user's local model (see docs/VERIFY.md).
+The web prototype is not connected to T5 yet; broader manual checks remain pending.
+See the examples above and `docs/VERIFY.md` for manual checks and recorded results.
+
 ## Files and architecture
 
 - `chatbot.py`: CLI, prompt loading, session loop and direct HTTP streaming
 - `prompts/system.txt`: editable assistant instructions
-- `requirements.txt`: sole external dependency
+- `requirements.txt`: HTTP, web server and JSON Schema dependencies
+- `structured/output.py`: reusable JSON validation and bounded correction loop
+- `schemas/`: example plan and task-extraction schemas
+- `tests/test_structured.py`: validation and retry boundary checks
 - `tests/test_chatbot.py`: local HTTP contract and error tests
 - `docs/SCOPING.md`: full 28-feature scope, architecture, ownership and six-week plan for four members
 - `docs/USER_STORIES.md`: stories and observable acceptance criteria
@@ -106,10 +137,15 @@ History is in RAM and is lost at exit. We resend all completed turns; there is n
 budgeting or summarization and very long sessions can exceed the model context.
 The selected model controls response quality and may not reliably obey the prompt.
 The timeout is an inactivity timeout, not a total generation time limit.
-Input is one line per turn. All 28 catalogue entries are in the agreed planning scope. Beyond B1, they are planned, not delivered functionality. The six-week plan and 56 draft user stories are in docs/ (English).
+Input is one line per turn. All 28 catalogue entries remain in the planning scope.
+B1 and A5 have CLI implementations; T5 is integrated into the CLI and both
+example scenarios have user-reported real-model evidence. R1 and X1 are partial prototypes. The remaining features are planned.
+The six-week plan and 56 user stories are in docs/.
 
 ## Sources
 
 Assignment: Sensai_bootstrap.pdf, Sensai_project.pdf, features_catalog.pdf supplied with the task.
 API reference: https://docs.ollama.com/api/chat
 Streaming: https://docs.ollama.com/api/streaming
+Structured output: https://docs.ollama.com/capabilities/structured-outputs
+Schema validation: https://python-jsonschema.readthedocs.io/en/stable/validate/

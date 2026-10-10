@@ -1,6 +1,6 @@
 # Quick Start — Ubuntu / WSL
 
-Extract the archive and open a terminal in `sensai-bootstrap`.
+Extract the archive and open a terminal in `sensai`.
 Python 3.10 or newer is required.
 
 1. Install Ollama: https://ollama.com/download/linux
@@ -41,5 +41,6 @@ python3 -m unittest discover -s tests -v
 These tests simulate the API. Every member must also test with a real local model.
 `docs/SCOPING.md` contains the complete preliminary six-week plan for four members:
 all 28 catalogue entries, architecture, ownership and acceptance milestones.
-Additional features are planned; only the mandatory base is implemented in the bootstrap.
+The CLI also includes personas and a first structured-output (T5) integration.
+For T5 examples and current limits, see README.md and docs/VERIFY.md.
 The README, plan and user stories are in English for the repository and defense.

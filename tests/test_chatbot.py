@@ -10,6 +10,7 @@ from unittest.mock import patch
 import requests
 import chatbot
 from persona.registry import load_personas
+from structured.output import JsonOutput
 
 PERSONA = {'id': 'tutor', 'name': 'Tutor', 'tone': 'calm', 'role': 'teacher', 'scope': 'basics'}
 
@@ -50,11 +51,12 @@ class ChatTests(unittest.TestCase):
             {'message': {'content': ''}, 'done': True},
         ]))
 
-    def run_cli(self, inputs, personas=None, active=None):
+    def run_cli(self, inputs, personas=None, active=None, json_output=None):
         output = io.StringIO()
         with patch('builtins.input', side_effect=inputs), \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-            chatbot.run_chat('test-model', 'System prompt', self.url, 2, personas, active)
+            chatbot.run_chat('test-model', 'System prompt', self.url, 2, personas, active,
+                             json_output=json_output)
         return output.getvalue()
 
     def test_stream_delivers_separate_unicode_chunks(self):
@@ -151,6 +153,62 @@ class ChatTests(unittest.TestCase):
     def test_persona_list_marks_active(self):
         output = self.run_cli(['/persona', '/exit'], load_personas(), 'reviewer')
         self.assertIn('explainer, reviewer (active)', output)
+
+    def test_json_mode_sends_schema_and_commits_only_valid_answer(self):
+        schema = {'type': 'object', 'properties': {'value': {'type': 'integer'}},
+                  'required': ['value'], 'additionalProperties': False}
+        self.reply('INVALID_SECRET')
+        self.reply('{"value": 1}')
+        self.reply('{"value": 2}')
+        output = self.run_cli(['First', 'Next', '/exit'], json_output=JsonOutput(schema))
+        self.assertNotIn('INVALID_SECRET', output)
+        self.assertEqual(len(self.server.payloads), 3)
+        for payload in self.server.payloads:
+            self.assertEqual(payload['format'], schema)
+            self.assertTrue(payload['stream'])
+            self.assertEqual(payload['options']['temperature'], 0)
+        history = self.server.payloads[-1]['messages']
+        self.assertEqual([m['role'] for m in history],
+                         ['system', 'user', 'assistant', 'user'])
+        self.assertEqual(json.loads(history[2]['content']), {'value': 1})
+        self.assertNotIn('rejected', json.dumps(history))
+
+    def test_json_exhaustion_does_not_pollute_next_turn(self):
+        self.reply('not JSON')
+        self.reply('still not JSON')
+        self.reply('{}')
+        output = self.run_cli(['Failed', 'Retry', '/exit'],
+                              json_output=JsonOutput({'type': 'object'}))
+        self.assertIn('No valid JSON after 2 attempt(s)', output)
+        messages = self.server.payloads[-1]['messages']
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[-1]['content'], 'Retry')
+
+    def test_json_connection_failure_does_not_retry(self):
+        with patch('chatbot.requests.post', side_effect=requests.ConnectionError) as post:
+            output = self.run_cli(['Hi', '/exit'],
+                                  json_output=JsonOutput({'type': 'object'}))
+        post.assert_called_once()
+        self.assertIn('Connection failed', output)
+
+    def test_json_cancel_discards_turn(self):
+        with patch('chatbot.stream_reply', side_effect=[KeyboardInterrupt, iter(['{}'])]) as call:
+            output = self.run_cli(['Cancel', 'Retry', '/exit'],
+                                  json_output=JsonOutput({'type': 'object'}))
+        self.assertIn('cancelled', output)
+        self.assertEqual(len(call.call_args.args[2]), 2)
+
+    def test_normal_chat_does_not_send_json_format(self):
+        self.reply()
+        self.run_cli(['Hi', '/exit'])
+        self.assertNotIn('format', self.server.payloads[0])
+
+    def test_invalid_schema_prevents_startup_http_call(self):
+        with patch('sys.argv', ['chatbot.py', '--model', 'test', '--json-schema',
+                                'definitely-missing-schema.json']), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(chatbot.main(), 1)
+        self.assertEqual(self.server.payloads, [])
 
 
 if __name__ == '__main__':
