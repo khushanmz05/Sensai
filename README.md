@@ -7,38 +7,23 @@ T4 provides opt-in file context and creation of new files for Linux/WSL.
 The first A3 increment previews each save and requires explicit confirmation.
 It does not implement the full Sensai feature catalogue.
 
-## Setup (Linux / WSL)
+## Install and run for the first time
 
-Install Ollama using the instructions at https://ollama.com/download/linux
-(the bootstrap subject also gives `curl -fsSL https://ollama.com/install.sh | sh`).
-Then, inside this project folder:
+**Start with [the step-by-step installation guide](START.md).** It explains how
+to install Ubuntu through WSL on Windows, obtain the project, install dependencies
+and Ollama, download a model, ask your first question, and run the tests. Each step
+identifies the terminal to use and the expected result. It also includes fixes for
+common errors and instructions for [starting again later](START.md#start-again-tomorrow).
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-ollama pull llama3.2:1b
-curl http://localhost:11434
-python3 chatbot.py --model llama3.2:1b
-```
+The documented path is Ubuntu 24.04, directly or inside WSL 2. Python 3.10 or newer
+is required. Windows users should use WSL to exercise the file features, which
+are not supported in native PowerShell. No API key is needed for the local model.
+The web UI remains a prototype; the installation guide runs the CLI.
 
-`llama3.2:1b` is an example lightweight model; any installed chat model can be selected.
-If Ollama is not running, open another terminal and run `ollama serve`.
-If the service already owns port 11434, do not start a second instance.
-On Ubuntu, if venv is unavailable, install `python3-venv` using your package manager.
-Each group member must install/pull a model and perform the real-model checklist below.
-No API key is needed for a local model.
-
-## Windows PowerShell
-
-Install Ollama from https://ollama.com/download/windows and launch it, then:
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-ollama pull llama3.2:1b
-.\.venv\Scripts\python.exe chatbot.py --model llama3.2:1b
-```
+The examples below assume setup is complete, your Ubuntu terminal is in the
+project folder, and `.venv` is active. Leave an existing chat with `/exit` before
+running another shell command. `llama3.2:1b` is the demonstration model; any
+installed chat model can be selected, with behavior depending on its capabilities.
 
 ## Usage
 
@@ -120,7 +105,7 @@ See the examples above and `docs/VERIFY.md` for manual checks and recorded resul
 - `docs/SCOPING.md`: full 28-feature scope, architecture, ownership and six-week plan for four members
 - `docs/USER_STORIES.md`: stories and observable acceptance criteria
 - `docs/VERIFY.md`: automated results and manual demo checklist
-- `START.md`: short English setup guide
+- `START.md`: installation from scratch, first launch, repeat launch and troubleshooting
 
 `main()` loads configuration and the prompt. `run_chat()` owns history and terminal IO.
 `stream_reply()` sends the message list and yields response text without managing history.
