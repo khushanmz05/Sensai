@@ -4,6 +4,7 @@ Uses POSIX directory descriptors and O_NOFOLLOW at every path component.
 No fallback to resolve-then-open: unsupported systems fail closed.
 """
 from dataclasses import dataclass
+from contextlib import contextmanager
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import stat
@@ -16,7 +17,7 @@ EXTENSIONS = frozenset({'.txt', '.md', '.py', '.json'})
 
 
 class FileAccessError(ValueError):
-    """A denied, unavailable or unsupported file read."""
+    """A denied, unavailable or unsupported file operation."""
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,7 @@ class WorkspaceReader:
     def __exit__(self, *_):
         self.close()
 
-    def read_text(self, relative_path):
+    def _path_parts(self, relative_path):
         if self._root_fd is None:
             raise FileAccessError('Workspace reader is closed.')
         if not isinstance(relative_path, str) or not relative_path.strip():
@@ -72,9 +73,13 @@ class WorkspaceReader:
             raise FileAccessError('Hidden files and directories are not allowed.')
         if PurePosixPath(relative_path).suffix.lower() not in EXTENSIONS:
             raise FileAccessError('Allowed file extensions: .txt, .md, .py, .json.')
+        return parts
 
+    @contextmanager
+    def _open_parent(self, relative_path):
+        """Open the checked parent directory without following symlinks."""
+        parts = self._path_parts(relative_path)
         directory_fd = None
-        file_fd = None
         try:
             directory_fd = os.dup(self._root_fd)
             for part in parts[:-1]:
@@ -82,19 +87,28 @@ class WorkspaceReader:
                                   dir_fd=directory_fd)
                 os.close(directory_fd)
                 directory_fd = next_fd
-            file_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
-                              dir_fd=directory_fd)
-            metadata = os.fstat(file_fd)
-            if not stat.S_ISREG(metadata.st_mode):
-                raise FileAccessError('Only regular text files can be read.')
-            if metadata.st_nlink != 1:
-                raise FileAccessError('Hard-linked files are not allowed.')
-            if metadata.st_size > MAX_BYTES:
-                raise FileAccessError(f'File exceeds the {MAX_BYTES}-byte limit.')
-            # Limit the read too: a file may grow after fstat().
-            with os.fdopen(file_fd, 'rb') as stream:
-                file_fd = None
-                data = stream.read(MAX_BYTES + 1)
+            yield directory_fd, parts[-1]
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
+
+    def read_text(self, relative_path):
+        file_fd = None
+        try:
+            with self._open_parent(relative_path) as (directory_fd, name):
+                file_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                  dir_fd=directory_fd)
+                metadata = os.fstat(file_fd)
+                if not stat.S_ISREG(metadata.st_mode):
+                    raise FileAccessError('Only regular text files can be read.')
+                if metadata.st_nlink != 1:
+                    raise FileAccessError('Hard-linked files are not allowed.')
+                if metadata.st_size > MAX_BYTES:
+                    raise FileAccessError(f'File exceeds the {MAX_BYTES}-byte limit.')
+                # Limit the read too: a file may grow after fstat().
+                with os.fdopen(file_fd, 'rb') as stream:
+                    file_fd = None
+                    data = stream.read(MAX_BYTES + 1)
             if len(data) > MAX_BYTES:
                 raise FileAccessError(f'File exceeds the {MAX_BYTES}-byte limit.')
             if b'\0' in data:
@@ -108,5 +122,3 @@ class WorkspaceReader:
         finally:
             if file_fd is not None:
                 os.close(file_fd)
-            if directory_fd is not None:
-                os.close(directory_fd)
