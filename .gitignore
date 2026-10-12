@@ -1,0 +1,8 @@
+
+/docs/MEMBER_B.md
+/docs/member_B.md
+/.venv/
+/.venv-wsl/
+__pycache__/
+*.py[cod]
+/local-output/

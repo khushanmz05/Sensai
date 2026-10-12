@@ -1,7 +1,8 @@
 # User Stories — Full Sensai Scope
 
 Preliminary backlog: two stories for each of 28 features, 56 in total.
-B1 is implemented in the bootstrap; other stories describe planned behavior.
+B1 and A5 are implemented in the CLI. T5 has an initial CLI integration, with
+user-reported real-model passes for both examples (see VERIFY.md). Other stories describe planned or partial behavior.
 Refine wording and acceptance criteria in week 1 and verify them before acceptance.
 
 ## B1-1 — Ask a question and a follow-up
@@ -184,6 +185,12 @@ Owner: B. First integration target: week 2.
 
 As a developer using Sensai, I want to read files from the selected project, so that I can inspect source code within permitted boundaries.
 
+Current increment: `--workspace` explicitly enables read-only access; `/read`
+queues a bounded UTF-8 file for the next question. Paths outside the selected root,
+hidden paths, symlinks, hard links and non-text/oversized files are rejected.
+CLI integration is implemented; model-selected tool calls and web integration
+remain pending. See FILE_ACCESS.md for reproducible checks.
+
 Acceptance criteria:
 - The scenario "read files from the selected project" works through the shared backend with real data, without substituting a mock result.
 - Check allowed roots and operation permissions before every read, create or edit; block traversal through .. and symlinks while allowing authorized operations.
@@ -194,6 +201,11 @@ Owner: B. First integration target: week 1–2.
 ## T4-2 — Save a result to an allowed folder
 
 As a developer using Sensai, I want to save a result to an allowed folder, so that I can obtain a file without changing unrelated data.
+
+Current increment: `--allow-create` enables `/save <new-relative-path>` in the CLI.
+The last complete answer is previewed and saved only after `yes`. Existing files
+are never overwritten; path/size rules still apply. Editing existing files and
+model-selected tool calls remain pending. See FILE_ACCESS.md.
 
 Acceptance criteria:
 - The scenario "save a result to an allowed folder" works through the shared backend with real data, without substituting a mock result.
@@ -207,9 +219,12 @@ Owner: B. First integration target: week 1–2.
 As a developer using Sensai, I want to obtain a structured plan, so that I can pass it to another component without manual parsing.
 
 Acceptance criteria:
-- The scenario "obtain a structured plan" works through the shared backend with real data, without substituting a mock result.
-- Request schema-conforming JSON and validate it; retry invalid output within a limit or reject it without side effects.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- With `--json-schema schemas/plan.json`, a plan contains a nonempty `goal` and a nonempty list of nonempty `steps`, with no extra properties.
+- Invalid output is withheld and retried within `--json-attempts`; exhaustion reports an error and leaves history unchanged.
+- A real local Ollama demonstration produces a valid plan; HTTP tests alone do not establish model quality.
+
+Status: integrated into CLI on 10 October 2026; the user supplied a successful
+real-model run for this example. Broader manual checks and shared web integration remain pending.
 
 Owner: B. First integration target: week 1.
 
@@ -218,9 +233,12 @@ Owner: B. First integration target: week 1.
 As a developer using Sensai, I want to extract tasks in a machine-readable format, so that I can import them into another tool.
 
 Acceptance criteria:
-- The scenario "extract tasks in a machine-readable format" works through the shared backend with real data, without substituting a mock result.
-- Request schema-conforming JSON and validate it; retry invalid output within a limit or reject it without side effects.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- With `--json-schema schemas/tasks.json`, every extracted task has a nonempty `title` and a `priority` of low, medium or high; extra properties are rejected.
+- Only validated JSON is displayed and committed to history; malformed JSON, missing fields and invalid priorities are rejected.
+- A real local Ollama demonstration extracts the requested tasks; a connection failure is reported without retrying or changing history.
+
+Status: integrated into CLI on 10 October 2026; the user supplied a successful
+real-model run for this example. Broader manual checks and shared web integration remain pending.
 
 Owner: B. First integration target: week 1.
 
@@ -314,6 +332,10 @@ Owner: A. First integration target: week 4.
 
 ## A3-1 — Approve a file modification
 
+Current increment: approval applies to creating a new file with `/save`.
+The immutable preview binds the destination and content to a one-use decision.
+Editing existing files and approvals for other tools remain planned.
+
 As a developer using Sensai, I want to approve a file modification, so that I can control changes to my project.
 
 Acceptance criteria:
@@ -324,6 +346,10 @@ Acceptance criteria:
 Owner: B. First integration target: week 2.
 
 ## A3-2 — Reject an unwanted action
+
+Current increment: any confirmation response other than `yes`, EOF or Ctrl+C
+cancels the pending CLI save without creating a file. Approval is not inferred
+from model text and cannot be reused for another path or content.
 
 As a developer using Sensai, I want to reject an unwanted action, so that I can preserve the original project state.
 

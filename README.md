@@ -1,40 +1,29 @@
-# Sensai bootstrap
+# Sensai
 
 Python 3.10+ CLI chatbot using the Ollama HTTP API directly. No LLM framework or Ollama SDK.
-This submission implements the bootstrap, not the full Sensai feature catalogue.
+This working copy includes the CLI chat, personas (A5), and a first CLI-integrated
+structured-output increment (T5). RAG chunking and the web UI are early prototypes.
+T4 provides opt-in file context and creation of new files for Linux/WSL.
+The first A3 increment previews each save and requires explicit confirmation.
+It does not implement the full Sensai feature catalogue.
 
-## Setup (Linux / WSL)
+## Install and run for the first time
 
-Install Ollama using the instructions at https://ollama.com/download/linux
-(the bootstrap subject also gives `curl -fsSL https://ollama.com/install.sh | sh`).
-Then, inside this project folder:
+**Start with [the step-by-step installation guide](START.md).** It explains how
+to install Ubuntu through WSL on Windows, obtain the project, install dependencies
+and Ollama, download a model, ask your first question, and run the tests. Each step
+identifies the terminal to use and the expected result. It also includes fixes for
+common errors and instructions for [starting again later](START.md#start-again-tomorrow).
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-ollama pull llama3.2:1b
-curl http://localhost:11434
-python3 chatbot.py --model llama3.2:1b
-```
+The documented path is Ubuntu 24.04, directly or inside WSL 2. Python 3.10 or newer
+is required. Windows users should use WSL to exercise the file features, which
+are not supported in native PowerShell. No API key is needed for the local model.
+The web UI remains a prototype; the installation guide runs the CLI.
 
-`llama3.2:1b` is an example lightweight model; any installed chat model can be selected.
-If Ollama is not running, open another terminal and run `ollama serve`.
-If the service already owns port 11434, do not start a second instance.
-On Ubuntu, if venv is unavailable, install `python3-venv` using your package manager.
-Each group member must install/pull a model and perform the real-model checklist below.
-No API key is needed for a local model.
-
-## Windows PowerShell
-
-Install Ollama from https://ollama.com/download/windows and launch it, then:
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-ollama pull llama3.2:1b
-.\.venv\Scripts\python.exe chatbot.py --model llama3.2:1b
-```
+The examples below assume setup is complete, your Ubuntu terminal is in the
+project folder, and `.venv` is active. Leave an existing chat with `/exit` before
+running another shell command. `llama3.2:1b` is the demonstration model; any
+installed chat model can be selected, with behavior depending on its capabilities.
 
 ## Usage
 
@@ -75,20 +64,97 @@ empty answers and streams that end without a completion marker.
 Only a complete question/answer pair is committed to history. Partial visible output
 is not reused after an error. All model calls use `POST /api/chat` directly.
 
+## Structured JSON output (T5, member B)
+
+Install the updated requirements, then run from the project directory:
+
+```bash
+python3 chatbot.py --model llama3.2:1b --json-schema schemas/plan.json
+python3 chatbot.py --model llama3.2:1b --json-schema schemas/tasks.json --json-attempts 2
+```
+
+For the first example, ask `Make a three-step plan to learn Python functions`.
+For the second, ask `Extract tasks: fix login (high priority), update README (low priority)`.
+The model must return the structure declared in the selected file. The schema is
+sent through Ollama's `format` field and checked locally with `jsonschema`.
+
+JSON responses are buffered until complete and valid; ordinary chat still streams.
+Invalid content gets at most two total attempts by default (configurable from 1 to 5).
+Rejected output and retry instructions never enter conversation history. Transport
+errors and cancellation are not retried. After exhaustion, the chat remains usable.
+
+This increment accepts draft 2020-12 inline schemas with a top-level object and no
+`$ref`/`$dynamicRef` references. `format` annotations (such as email) are not asserted.
+Validation verifies structure, not factual accuracy or permission to execute an action.
+Both CLI examples passed on the user's local model (see docs/VERIFY.md).
+The web prototype is not connected to T5 yet; broader manual checks remain pending.
+See the examples above and `docs/VERIFY.md` for manual checks and recorded results.
+
 ## Files and architecture
 
 - `chatbot.py`: CLI, prompt loading, session loop and direct HTTP streaming
 - `prompts/system.txt`: editable assistant instructions
-- `requirements.txt`: sole external dependency
+- `requirements.txt`: HTTP, web server and JSON Schema dependencies
+- `structured/output.py`: reusable JSON validation and bounded correction loop
+- `schemas/`: example plan and task-extraction schemas
+- `tests/test_structured.py`: validation and retry boundary checks
+- `file_access/reader.py`: bounded reads beneath an explicit workspace root
+- `file_access/writer.py`: immutable save previews and approved create-only writes
+- `docs/FILE_ACCESS.md`: T4 behavior, permission boundaries and manual checks
 - `tests/test_chatbot.py`: local HTTP contract and error tests
 - `docs/SCOPING.md`: full 28-feature scope, architecture, ownership and six-week plan for four members
 - `docs/USER_STORIES.md`: stories and observable acceptance criteria
 - `docs/VERIFY.md`: automated results and manual demo checklist
-- `START.md`: short English setup guide
+- `START.md`: installation from scratch, first launch, repeat launch and troubleshooting
 
 `main()` loads configuration and the prompt. `run_chat()` owns history and terminal IO.
 `stream_reply()` sends the message list and yields response text without managing history.
-There is no file access tool, persistence, RAG or code execution in this bootstrap.
+File access supports explicitly requested context and confirmed creation in the CLI.
+There is no persistence, full RAG pipeline, existing-file editing or code execution yet.
+
+## Read a project file (T4 first increment, Linux/WSL)
+
+```bash
+python chatbot.py --model llama3.2:1b --workspace examples
+```
+
+Then enter each line in the chat:
+
+```text
+/read project_notes.md
+Which language and database does this project use?
+/read ../README.md
+/exit
+```
+
+The first command queues one file for the next question. The expected answer is
+Python and SQLite. The traversal command must be rejected without a model call.
+Paths are relative to `--workspace`; omit `--workspace` to disable file access.
+Only `.txt`, `.md`, `.py` and `.json` UTF-8 files up to 16 KiB are allowed.
+Absolute paths, `..`, hidden paths, symbolic links and hard-linked files are denied.
+Creation requires the additional `--allow-create` flag described below.
+Model-initiated tool calls are not implemented in this increment.
+
+T4 also works with `--json-schema schemas/tasks.json`. Read `project_notes.md`,
+then ask to extract the two tasks. Use `/clear` to discard all conversation and
+pending file context. More details are in `docs/FILE_ACCESS.md`.
+
+## Save an answer after confirmation (T4 / initial A3)
+
+```bash
+mkdir -p local-output
+python chatbot.py --model llama3.2:1b --workspace local-output --allow-create
+```
+
+Ask a question, wait for its completed answer, then enter `/save answer.md`.
+The CLI displays the exact path, UTF-8 byte count and full content preview. Type
+`yes` to create the file; any other input, EOF or Ctrl+C cancels without creating it.
+The `local-output/` folder is ignored by Git. To read the result, use `/read answer.md`.
+
+Existing files, including symbolic links, cannot be overwritten. Only `.txt`, `.md`,
+`.py` and `.json` files up to 16 KiB are allowed. Parent directories must already exist.
+This is a synchronous CLI approval for creating a new file, not general agent approval,
+editing, scheduling or publication. The model cannot approve its own output.
 
 ## Tests
 
@@ -106,10 +172,15 @@ History is in RAM and is lost at exit. We resend all completed turns; there is n
 budgeting or summarization and very long sessions can exceed the model context.
 The selected model controls response quality and may not reliably obey the prompt.
 The timeout is an inactivity timeout, not a total generation time limit.
-Input is one line per turn. All 28 catalogue entries are in the agreed planning scope. Beyond B1, they are planned, not delivered functionality. The six-week plan and 56 draft user stories are in docs/ (English).
+Input is one line per turn. All 28 catalogue entries remain in the planning scope.
+B1 and A5 have CLI implementations; T5 is integrated into the CLI and both
+example scenarios have user-reported real-model evidence. R1 and X1 are partial prototypes. The remaining features are planned.
+The six-week plan and 56 user stories are in docs/.
 
 ## Sources
 
 Assignment: Sensai_bootstrap.pdf, Sensai_project.pdf, features_catalog.pdf supplied with the task.
 API reference: https://docs.ollama.com/api/chat
 Streaming: https://docs.ollama.com/api/streaming
+Structured output: https://docs.ollama.com/capabilities/structured-outputs
+Schema validation: https://python-jsonschema.readthedocs.io/en/stable/validate/
