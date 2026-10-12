@@ -1,0 +1,7 @@
+Improve the following system prompt by adding one short example of the expected assistant behavior.
+
+System prompt:
+{prompt}
+
+Context:
+{context}

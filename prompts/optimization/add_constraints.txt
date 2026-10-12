@@ -1,0 +1,7 @@
+Strengthen the following system prompt by adding concise constraints that reduce ambiguity and hallucinations.
+
+System prompt:
+{prompt}
+
+Context:
+{context}

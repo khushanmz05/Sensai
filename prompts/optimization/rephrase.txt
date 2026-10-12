@@ -1,0 +1,7 @@
+Rephrase the following system prompt to improve clarity while preserving intent.
+
+System prompt:
+{prompt}
+
+Context:
+{context}
