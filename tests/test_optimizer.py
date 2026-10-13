@@ -52,13 +52,16 @@ class PromptOptimizerTests(unittest.TestCase):
         selected = [row for row in result.history if row['selected']]
         self.assertEqual(len(selected), 2)
 
-        with sqlite3.connect(self.db_path) as connection:
-            rows = connection.execute(
+        conn = sqlite3.connect(self.db_path)
+        try:
+            rows = conn.execute(
                 'SELECT COUNT(*) FROM optimization_history'
             ).fetchone()[0]
-            chosen = connection.execute(
+            chosen = conn.execute(
                 'SELECT strategy FROM optimization_history WHERE iteration = 1 AND selected = 1'
             ).fetchone()[0]
+        finally:
+            conn.close()
         self.assertEqual(rows, len(result.history))
         self.assertEqual(chosen, 'add_constraints')
 

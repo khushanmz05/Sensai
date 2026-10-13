@@ -44,6 +44,13 @@ CREATE TABLE IF NOT EXISTS profiles (
     updated_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS session_personas (
+    session_id TEXT PRIMARY KEY,
+    persona_id TEXT NOT NULL,
+    updated_at REAL NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_session
 ON messages(session_id, id);
 """
@@ -89,28 +96,44 @@ class SessionStore:
         finally:
             conn.close()
 
-    def create_session(self, title: str = "New session") -> dict:
+    def create_session(self, title: str = "New session", persona_id: str | None = None, session_id: str | None = None) -> dict:
         now = time.time()
-        session_id = str(uuid.uuid4())
+        sid = session_id or str(uuid.uuid4())
         with self._transaction() as conn:
             conn.execute(
                 "INSERT INTO sessions (id, title, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?)",
-                (session_id, title, now, now),
+                (sid, title, now, now),
             )
-        return self.get_session(session_id)
+            if persona_id and str(persona_id).strip():
+                conn.execute(
+                    "INSERT INTO session_personas (session_id, persona_id, updated_at) "
+                    "VALUES (?, ?, ?)",
+                    (sid, str(persona_id).strip(), now),
+                )
+        return self.get_session(sid)
 
     def get_session(self, session_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM sessions WHERE id = ?", (session_id,)
             ).fetchone()
-        return dict(row) if row else None
+            if not row:
+                return None
+            res = dict(row)
+            p_row = conn.execute(
+                "SELECT persona_id FROM session_personas WHERE session_id = ?", (session_id,)
+            ).fetchone()
+            res["persona_id"] = p_row["persona_id"] if p_row else None
+            return res
 
     def list_sessions(self) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM sessions ORDER BY updated_at DESC"
+                "SELECT s.*, sp.persona_id "
+                "FROM sessions s "
+                "LEFT JOIN session_personas sp ON s.id = sp.session_id "
+                "ORDER BY s.updated_at DESC"
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -130,6 +153,38 @@ class SessionStore:
                 "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
                 (status, time.time(), session_id),
             )
+
+    def set_session_persona(self, session_id: str, persona_id: str | None) -> None:
+        now = time.time()
+        with self._transaction() as conn:
+            if not conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone():
+                raise ValueError(f"Unknown session: {session_id}")
+            if persona_id and str(persona_id).strip():
+                conn.execute(
+                    "INSERT INTO session_personas (session_id, persona_id, updated_at) "
+                    "VALUES (?, ?, ?) "
+                    "ON CONFLICT(session_id) DO UPDATE SET "
+                    "persona_id = excluded.persona_id, updated_at = excluded.updated_at",
+                    (session_id, str(persona_id).strip(), now),
+                )
+            else:
+                conn.execute("DELETE FROM session_personas WHERE session_id = ?", (session_id,))
+            conn.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
+
+    def get_session_persona(self, session_id: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT persona_id FROM session_personas WHERE session_id = ?", (session_id,)
+            ).fetchone()
+        return row["persona_id"] if row else None
+
+    def clear_session_messages(self, session_id: str) -> None:
+        now = time.time()
+        with self._transaction() as conn:
+            if not conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone():
+                raise ValueError(f"Unknown session: {session_id}")
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            conn.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
 
     def add_message(
         self,

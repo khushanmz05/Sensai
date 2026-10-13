@@ -170,13 +170,17 @@ class PromptOptimizer:
 
     def _setup_database(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.db_path) as connection:
-            connection.execute(
-                'CREATE TABLE IF NOT EXISTS optimization_history ('
-                'run_id TEXT NOT NULL, iteration INTEGER NOT NULL, strategy TEXT NOT NULL, '
-                'prompt TEXT NOT NULL, score REAL NOT NULL, selected INTEGER NOT NULL, '
-                'created_at REAL NOT NULL)'
-            )
+        connection = sqlite3.connect(self.db_path)
+        try:
+            with connection:
+                connection.execute(
+                    'CREATE TABLE IF NOT EXISTS optimization_history ('
+                    'run_id TEXT NOT NULL, iteration INTEGER NOT NULL, strategy TEXT NOT NULL, '
+                    'prompt TEXT NOT NULL, score REAL NOT NULL, selected INTEGER NOT NULL, '
+                    'created_at REAL NOT NULL)'
+                )
+        finally:
+            connection.close()
 
     def _record(self, run_id, history, iteration, strategy, prompt, score, selected):
         row = {
@@ -188,19 +192,27 @@ class PromptOptimizer:
             'selected': bool(selected),
         }
         history.append(row)
-        with sqlite3.connect(self.db_path) as connection:
-            connection.execute(
-                'INSERT INTO optimization_history '
-                '(run_id, iteration, strategy, prompt, score, selected, created_at) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                (run_id, iteration, strategy, prompt, score, int(selected), time.time()),
-            )
+        connection = sqlite3.connect(self.db_path)
+        try:
+            with connection:
+                connection.execute(
+                    'INSERT INTO optimization_history '
+                    '(run_id, iteration, strategy, prompt, score, selected, created_at) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    (run_id, iteration, strategy, prompt, score, int(selected), time.time()),
+                )
+        finally:
+            connection.close()
         return row
 
     def _update_selected(self, run_id, iteration, strategy, prompt):
-        with sqlite3.connect(self.db_path) as connection:
-            connection.execute(
-                'UPDATE optimization_history SET selected = 1 '
-                'WHERE run_id = ? AND iteration = ? AND strategy = ? AND prompt = ?',
-                (run_id, iteration, strategy, prompt),
-            )
+        connection = sqlite3.connect(self.db_path)
+        try:
+            with connection:
+                connection.execute(
+                    'UPDATE optimization_history SET selected = 1 '
+                    'WHERE run_id = ? AND iteration = ? AND strategy = ? AND prompt = ?',
+                    (run_id, iteration, strategy, prompt),
+                )
+        finally:
+            connection.close()
