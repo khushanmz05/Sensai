@@ -5,6 +5,7 @@ import json
 import math
 import sys
 from pathlib import Path
+from datetime import datetime
 
 import requests
 
@@ -26,6 +27,18 @@ FILE_CONTEXT_RULE = (
 class ChatError(Exception):
     """An error that can be explained without a traceback."""
 
+def make_system_message(system_prompt, personas, active,
+                        session_store=None, user_id="default"):
+    """Build the system message with persona and saved profile preferences."""
+    prompt = system_prompt
+
+    if active is not None:
+        prompt = persona_prompt(prompt, personas[active])
+
+    if session_store is not None:
+        prompt += "\n\n" + build_system_message(session_store, user_id)
+
+    return {"role": "system", "content": prompt}
 
 def confirm_save(writer, path, content):
     """Preview the exact operation and accept only explicit human confirmation."""
@@ -102,6 +115,58 @@ def stream_reply(base_url, model, messages, timeout, schema=None):
     except requests.RequestException as error:
         raise ChatError(f'HTTP request failed: {error}') from error
 
+def format_timestamp(timestamp):
+    """Format a Unix timestamp safely for terminal output."""
+    if timestamp is None:
+        return "never"
+
+    return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def print_profile_context(session_store, session, user_id="default"):
+    """Print profile settings and every persisted message in the active session."""
+    profile = session_store.get_profile(user_id)
+
+    print("\n========== PROFILE ==========")
+    print(f"User ID:           {profile['user_id']}")
+    print(f"Language:          {profile['language']}")
+    print(f"Explanation level: {profile['explanation_level']}")
+    print(f"Preferred persona: {profile['preferred_persona']}")
+    print(f"Updated:           {format_timestamp(profile['updated_at'])}")
+
+    print("\n========== ACTIVE SESSION ==========")
+
+    if session is None:
+        print("No active session.")
+        print("=============================\n")
+        return
+
+    print(f"ID:      {session['id']}")
+    print(f"Title:   {session['title']}")
+    print(f"Status:  {session['status']}")
+    print(f"Created: {format_timestamp(session['created_at'])}")
+    print(f"Updated: {format_timestamp(session['updated_at'])}")
+
+    messages = session_store.get_messages(
+        session["id"],
+        statuses=("completed", "failed", "cancelled"),
+    )
+
+    print("\n========== CHAT HISTORY ==========")
+
+    if not messages:
+        print("(This session has no saved messages.)")
+    else:
+        for number, message in enumerate(messages, start=1):
+            role = message["role"].upper()
+            status = message["status"]
+            created_at = format_timestamp(message["created_at"])
+
+            print(f"\n[{number}] {role} | {status} | {created_at}")
+            print(message["content"])
+
+    print("\n==================================\n")
+
 
 def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
              json_output=None, json_attempts=2, file_reader=None, store=None,
@@ -169,17 +234,15 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
                 session = session_store.create_session('New session')
                 session_store.set_active_session(user_id, session['id'])
 
-            history = [{'role': 'system', 'content': system_prompt}]
-
-            if session_store is not None:
-                history[0]['content'] += '\n\n' + build_system_message(
-                    session_store, user_id
+            history = [
+                make_system_message(
+                    system_prompt,
+                    personas,
+                    active,
+                    session_store,
+                    user_id,
                 )
-
-            if active is not None:
-                history[0]['content'] = persona_prompt(
-                    system_prompt, personas[active]
-                )
+            ]
 
             attachment = None
             last_answer = None
@@ -227,100 +290,202 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
             elif persona_id not in personas:
                 print(f'Unknown persona {persona_id!r}. Type /persona to list them.')
             else:
-                history[0] = {'role': 'system',
-                    'content': persona_prompt(system_prompt, personas[persona_id])}
                 active = persona_id
-                print(f'Persona switched to {personas[persona_id]["name"]}; history kept.')
+                history[0] = make_system_message(
+                    system_prompt,
+                    personas,
+                    active,
+                    session_store,
+                    user_id,
+                )
+                print(
+                    f'Persona switched to {personas[persona_id]["name"]}; '
+                    'history kept.'
+                )
             continue
         if user_text == '/session' or user_text.startswith('/session '):
             if session_store is None:
                 print('Session persistence is unavailable.')
                 continue
 
-            parts = user_text.split(maxsplit=2)
-            subcommand = parts[1] if len(parts) > 1 else ''
+            try:
+                parts = user_text.split(maxsplit=2)
+                subcommand = parts[1] if len(parts) > 1 else ''
 
-            if subcommand == '':
-                current = session_store.get_active_session(user_id)
-                if current:
-                    print(f'Active session: {current["id"]} — {current["title"]}')
+                if subcommand == '':
+                    current = session_store.get_active_session(user_id)
+
+                    if current:
+                        print(
+                            f'Active session: {current["id"]} — '
+                            f'{current["title"]}'
+                        )
+                    else:
+                        print('No active session.')
+
+                elif subcommand == 'new':
+                    title = parts[2] if len(parts) > 2 else 'New session'
+
+                    session = session_store.create_session(title)
+                    session_store.set_active_session(user_id, session['id'])
+
+                    history = [
+                        make_system_message(
+                            system_prompt,
+                            personas,
+                            active,
+                            session_store,
+                            user_id,
+                        )
+                    ]
+
+                    attachment = None
+                    last_answer = None
+
+                    print(
+                        f'Created and switched to session '
+                        f'{session["id"]} — {session["title"]}.'
+                    )
+
+                elif subcommand == 'list':
+                    sessions = session_store.list_sessions()
+
+                    if not sessions:
+                        print('No saved sessions.')
+
+                    for item in sessions:
+                        marker = (
+                            ' (active)'
+                            if session and item['id'] == session['id']
+                            else ''
+                        )
+                        print(f'{item["id"]}  {item["title"]}{marker}')
+
+                elif subcommand == 'use' and len(parts) == 3:
+                    selected = session_store.get_session(parts[2])
+
+                    if selected is None:
+                        print('Session not found.')
+                        continue
+
+                    session = selected
+                    session_store.set_active_session(user_id, session['id'])
+
+                    history = [
+                        make_system_message(
+                            system_prompt,
+                            personas,
+                            active,
+                            session_store,
+                            user_id,
+                        )
+                    ]
+
+                    history.extend(
+                        {
+                            'role': message['role'],
+                            'content': message['content'],
+                        }
+                        for message in session_store.get_messages(session['id'])
+                    )
+
+                    attachment = None
+                    last_answer = None
+
+                    print(
+                        f'Switched to session {session["id"]} — '
+                        f'{session["title"]}.'
+                    )
+
+                elif subcommand == 'rename' and len(parts) == 3:
+                    if session is None:
+                        print('No active session.')
+                        continue
+
+                    updated = session_store.rename_session(
+                        session['id'],
+                        parts[2],
+                    )
+                    session = updated
+
+                    print(f'Renamed active session to: {updated["title"]}.')
+
                 else:
-                    print('No active session.')
-
-            elif subcommand == 'new':
-                title = parts[2] if len(parts) > 2 else 'New session'
-                session = session_store.create_session(title)
-                session_store.set_active_session(user_id, session['id'])
-
-                history = [
-                    {
-                        'role': 'system',
-                        'content': system_prompt + '\n\n' + build_system_message(
-                            session_store, user_id
-                        ),
-                    }
-                ]
-                if active is not None:
-                    history[0]['content'] = persona_prompt(
-                        system_prompt, personas[active]
+                    print(
+                        'Usage: /session [new [title] | list | use <id> | '
+                        'rename <title>]'
                     )
 
-                attachment = None
-                last_answer = None
-                print(f'Created and switched to session {session["id"]}.')
+            except DatabaseError as error:
+                print(f'Session storage error: {error}', file=sys.stderr)
 
-            elif subcommand == 'list':
-                sessions = session_store.list_sessions()
-                if not sessions:
-                    print('No saved sessions.')
-                for item in sessions:
-                    marker = ' (active)' if session and item['id'] == session['id'] else ''
-                    print(f'{item["id"]}  {item["title"]}{marker}')
+            continue
+        if user_text == "/profile" or user_text.startswith("/profile "):
+            if session_store is None:
+                print("Profile/session persistence is unavailable.")
+                continue
 
-            elif subcommand == 'use' and len(parts) == 3:
-                selected = session_store.get_session(parts[2])
-                if selected is None:
-                    print('Session not found.')
-                    continue
+            parts = user_text.split(maxsplit=2)
+            subcommand = parts[1] if len(parts) > 1 else ""
 
-                session = selected
-                session_store.set_active_session(user_id, session['id'])
+            try:
+                if subcommand == "":
+                    session = session_store.get_active_session(user_id)
+                    print_profile_context(session_store, session, user_id)
 
-                history = [
-                    {
-                        'role': 'system',
-                        'content': system_prompt + '\n\n' + build_system_message(
-                            session_store, user_id
-                        ),
-                    }
-                ]
-                if active is not None:
-                    history[0]['content'] = persona_prompt(
-                        system_prompt, personas[active]
+                elif subcommand == "language" and len(parts) == 3:
+                    session_store.save_profile(
+                        user_id,
+                        language=parts[2],
+                    )
+                    history[0] = make_system_message(
+                        system_prompt,
+                        personas,
+                        active,
+                        session_store,
+                        user_id,
+                    )
+                    print(f"Profile language updated to: {parts[2]}")
+
+                elif subcommand in {"level", "explanation"} and len(parts) == 3:
+                    session_store.save_profile(
+                        user_id,
+                        explanation_level=parts[2],
+                    )
+                    history[0] = make_system_message(
+                        system_prompt,
+                        personas,
+                        active,
+                        session_store,
+                        user_id,
+                    )
+                    print(f"Explanation level updated to: {parts[2]}")
+
+                elif subcommand == "persona" and len(parts) == 3:
+                    session_store.save_profile(
+                        user_id,
+                        preferred_persona=parts[2],
+                    )
+                    history[0] = make_system_message(
+                        system_prompt,
+                        personas,
+                        active,
+                        session_store,
+                        user_id,
+                    )
+                    print(f"Preferred persona updated to: {parts[2]}")
+
+                else:
+                    print(
+                        "Usage:\n"
+                        "  /profile\n"
+                        "  /profile language <language>\n"
+                        "  /profile level <concise|detailed|beginner-friendly>\n"
+                        "  /profile persona <persona description>"
                     )
 
-                history.extend(
-                    {'role': message['role'], 'content': message['content']}
-                    for message in session_store.get_messages(session['id'])
-                )
-
-                attachment = None
-                last_answer = None
-                print(f'Switched to session {session["id"]} — {session["title"]}.')
-
-            elif subcommand == 'rename' and len(parts) == 3:
-                if session is None:
-                    print('No active session.')
-                    continue
-                updated = session_store.rename_session(session['id'], parts[2])
-                session = updated
-                print(f'Renamed active session to: {updated["title"]}.')
-
-            else:
-                print(
-                    'Usage: /session [new [title] | list | use <id> | '
-                    'rename <title>]'
-                )
+            except DatabaseError as error:
+                print(f"Could not update profile: {error}", file=sys.stderr)
 
             continue
         if not user_text:
