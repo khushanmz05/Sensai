@@ -99,6 +99,27 @@
 
     let sessionTotalTokens = 0;
     let currentMessages = [];
+    let savedPersonaId = null;
+
+    fetch(`/api/sessions/${sessionId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data) return;
+        savedPersonaId = data.persona_id;
+        if (savedPersonaId) personaSelect.value = savedPersonaId;
+        if (Array.isArray(data.messages)) {
+          data.messages.forEach(m => {
+            if (m.role === 'user') {
+              addLine('user', 'You: ' + m.content);
+              currentMessages.push({role: 'user', content: m.content});
+            } else if (m.role === 'assistant') {
+              addLine('assistant', m.content);
+              currentMessages.push({role: 'assistant', content: m.content});
+            }
+          });
+        }
+      })
+      .catch(() => {});
 
     // Load available personas
     fetch('/api/personas')
@@ -110,6 +131,7 @@
           opt.textContent = `${p.name} (${p.role})`;
           personaSelect.appendChild(opt);
         });
+        if (savedPersonaId) personaSelect.value = savedPersonaId;
       })
       .catch(() => {});
 
