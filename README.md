@@ -177,6 +177,33 @@ B1 and A5 have CLI implementations; T5 is integrated into the CLI and both
 example scenarios have user-reported real-model evidence. R1 and X1 are partial prototypes. The remaining features are planned.
 The six-week plan and 56 user stories are in docs/.
 
+## Web Service & Centralized Configuration
+
+Sensai includes a FastAPI web service (`web/app.py`) providing a browser chat interface (`/`), observability dashboard (`/dashboard`), and a complete REST API connected directly to the real backend stores and core chat engine.
+
+### Configuration via Environment Variables
+
+All settings are centralized in `core/config.py` and can be overridden via environment variables or CLI flags:
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `SENSAI_OLLAMA_HOST` | Fixed server-side Ollama HTTP URL (client cannot choose outbound host) | `http://localhost:11434` |
+| `SENSAI_MODEL` | Default model name for web runs | `llama3.2:1b` |
+| `SENSAI_MODE` | Runtime mode: `ollama` (real model) or `stub` (offline simulation) | `ollama` (auto-falls back if unreachable) |
+| `SENSAI_DB` | Path to SQLite session database | `sensai_sessions.db` |
+| `SENSAI_EVENTS_DB` | Path to SQLite observability event store | `sensai_events.db` |
+| `SENSAI_PROMPTS_DB` | Path to SQLite prompt versioning store | `sensai_prompts.db` |
+| `SENSAI_ARTIFACTS_DB` | Path to SQLite artifact store | `sensai_artifacts.db` |
+| `SENSAI_SNAPSHOTS_DB` | Path to SQLite public snapshot store | `sensai_snapshots.db` |
+| `SENSAI_WORKSPACE` | Root directory for workspace file read and write | `./workspace` |
+
+### Running the Web Service
+
+```bash
+uvicorn web.app:app --host 127.0.0.1 --port 8000
+```
+Open `http://localhost:8000` for the Web Chat UI or `http://localhost:8000/dashboard` for metrics and prompt version inspection.
+
 ## Sources
 
 Assignment: Sensai_bootstrap.pdf, Sensai_project.pdf, features_catalog.pdf supplied with the task.
