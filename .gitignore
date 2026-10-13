@@ -6,3 +6,6 @@
 __pycache__/
 *.py[cod]
 /local-output/
+*.db
+*.sqlite
+*.sqlite3
