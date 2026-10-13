@@ -36,6 +36,9 @@ from export.service import ExportError, SnapshotStore, sanitize_snapshot_data
 from forms.service import FormValidationError, validate_form_answers, validate_form_schema
 from persona.registry import PersonaError, load_personas, persona_prompt
 from prompts.versioning import PromptError, PromptVersionStore
+from retrieval.chunking import chunk_text
+from retrieval.embeddings import embed
+from retrieval.rag import format_context, ingest, retrieve
 from retrieval.store import VectorStore
 from session import DatabaseError, SessionStore, build_system_message
 from structured.output import JsonOutput, StructuredOutputError, strict_json
@@ -86,6 +89,19 @@ class RenameSessionRequest(BaseModel):
 
 class SwitchPersonaRequest(BaseModel):
     persona_id: Optional[str] = None
+
+
+class ProfileRequest(BaseModel):
+    user_id: str = 'default'
+    language: Optional[str] = None
+    explanation_level: Optional[str] = None
+    preferred_persona: Optional[str] = None
+
+
+class IngestRequest(BaseModel):
+    directory: Optional[str] = None
+    content: Optional[str] = None
+    filename: Optional[str] = 'document.txt'
 
 
 class CreatePromptRequest(BaseModel):
@@ -223,6 +239,71 @@ def select_session(session_id: str, user_id: str = 'default'):
         raise HTTPException(status_code=404, detail='Session not found.')
     app.state.session_store.set_active_session(user_id, session_id)
     return format_session_response(sess, app.state.session_store)
+
+
+@app.get('/api/profile')
+def get_profile(user_id: str = 'default'):
+    return app.state.session_store.get_profile(user_id)
+
+
+@app.post('/api/profile')
+def save_profile(req: ProfileRequest):
+    return app.state.session_store.save_profile(
+        user_id=req.user_id,
+        language=req.language,
+        explanation_level=req.explanation_level,
+        preferred_persona=req.preferred_persona,
+    )
+
+
+@app.get('/api/retrieval/sources')
+def list_sources():
+    all_chunks = app.state.vector_store.get_all()
+    sources: Dict[str, int] = {}
+    for c in all_chunks:
+        src = c.get('source_file', 'unknown')
+        sources[src] = sources.get(src, 0) + 1
+    return [{'source_file': k, 'chunks_count': v} for k, v in sources.items()]
+
+
+@app.post('/api/retrieval/ingest')
+def ingest_documents(req: IngestRequest):
+    try:
+        if req.directory:
+            root = settings.workspace_dir
+            if root is None:
+                raise HTTPException(status_code=403, detail='Directory ingestion needs a configured workspace.')
+            target = (root / req.directory).resolve()
+            if target != root and not target.is_relative_to(root):
+                raise HTTPException(status_code=403, detail='Directory is outside the workspace.')
+            if not target.is_dir():
+                raise HTTPException(status_code=404, detail='Directory not found.')
+            count = ingest(str(target), app.state.vector_store)
+            return {'status': 'ingested', 'chunks_count': count, 'directory': req.directory}
+        elif req.content:
+            chunks = chunk_text(req.content)
+            if not chunks:
+                return {'status': 'empty', 'chunks_count': 0}
+            try:
+                vectors = embed([c['content'] for c in chunks])
+            except Exception:
+                from retrieval.rag import _deterministic_fallback_embed
+                vectors = [_deterministic_fallback_embed(c['content']) for c in chunks]
+            for c, vec in zip(chunks, vectors):
+                app.state.vector_store.add(
+                    source_file=req.filename or 'uploaded.txt',
+                    start_line=c['start_line'],
+                    end_line=c['end_line'],
+                    content=c['content'],
+                    embedding=vec,
+                )
+            return {'status': 'ingested', 'chunks_count': len(chunks), 'filename': req.filename}
+        else:
+            raise HTTPException(status_code=422, detail='Must provide directory or content.')
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail='Ingestion failed.')
 
 
 @app.get('/api/prompts')
