@@ -34,6 +34,7 @@ from events.contract import EventStream, to_sse
 from events.store import EventStore
 from export.service import ExportError, SnapshotStore, sanitize_snapshot_data
 from forms.service import FormValidationError, validate_form_answers, validate_form_schema
+from optimization.optimizer import OptimizationError, PromptOptimizer
 from persona.registry import PersonaError, load_personas, persona_prompt
 from prompts.versioning import PromptError, PromptVersionStore
 from retrieval.chunking import chunk_text
@@ -110,6 +111,12 @@ class CreatePromptRequest(BaseModel):
     author: str = 'user'
     description: str = ''
     activate: bool = True
+
+
+class OptimizePromptRequest(BaseModel):
+    initial_prompt: Optional[str] = None
+    max_iterations: int = 3
+    description: str = 'Optimized system prompt'
 
 
 class CreateArtifactRequest(BaseModel):
@@ -330,6 +337,40 @@ def create_prompt(request: CreatePromptRequest):
             activate=request.activate,
         )
     except PromptError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
+
+@app.post('/api/prompts/optimize')
+def optimize_prompt(req: OptimizePromptRequest):
+    try:
+        active = app.state.prompts.get_active_version('system')
+        initial_prompt = req.initial_prompt or (active['content'] if active else 'You are Sensai.')
+        
+        def simple_eval(p: str, ctx: str) -> float:
+            score = 0.5
+            if 'Sensai' in p:
+                score += 0.2
+            if len(p) > 20:
+                score += 0.1
+            return min(1.0, score)
+
+        optimizer = PromptOptimizer(
+            model=settings.default_model,
+            host=app.state.ollama_host,
+            max_iterations=req.max_iterations,
+            db_path=Path(settings.prompts_db).parent / 'opt_history.sqlite3',
+            variant_generator=lambda prompt, strategy, _: f"{prompt} [{strategy}]",
+        )
+        result = optimizer.optimize(initial_prompt, simple_eval)
+        new_ver = app.state.prompts.create_version(
+            name='system',
+            content=result.optimized_prompt,
+            author='optimizer',
+            description=f"{req.description} (score: {result.best_score})",
+            activate=True,
+        )
+        return {'status': 'optimized', 'version': new_ver, 'best_score': result.best_score}
+    except (PromptError, OptimizationError) as error:
         raise HTTPException(status_code=422, detail=str(error))
 
 
