@@ -33,6 +33,8 @@ from core.config import settings
 from events.contract import EventStream, to_sse
 from events.store import EventStore
 from export.service import ExportError, SnapshotStore, sanitize_snapshot_data
+from file_access.reader import FileAccessError, FileSnapshot, SUPPORTED, WorkspaceReader
+from file_access.writer import CreatePlan, WorkspaceWriter
 from forms.service import FormValidationError, validate_form_answers, validate_form_schema
 from optimization.optimizer import OptimizationError, PromptOptimizer
 from persona.registry import PersonaError, load_personas, persona_prompt
@@ -62,6 +64,64 @@ app.state.artifacts = ArtifactStore(str(settings.artifacts_db))
 app.state.snapshots = SnapshotStore(str(settings.snapshots_db))
 app.state.vector_store = VectorStore(':memory:')
 
+class SafeWorkspaceWriterFallback:
+    def __init__(self, root: Path):
+        self.root = Path(root).expanduser().resolve(strict=True)
+        self._pending: Optional[CreatePlan] = None
+
+    def close(self):
+        self._pending = None
+
+    def _inside(self, p: Path) -> bool:
+        return p == self.root or p.is_relative_to(self.root)
+
+    def read_text(self, relative_path: str) -> FileSnapshot:
+        p = (self.root / relative_path).resolve()
+        if not self._inside(p):
+            raise FileAccessError('Path outside workspace.')
+        if not p.is_file():
+            raise FileAccessError(f'File not found: {relative_path}')
+        content = p.read_text(encoding='utf-8')
+        return FileSnapshot(relative_path, content, len(content.encode('utf-8')))
+
+    def prepare_create(self, relative_path: str, content: str) -> CreatePlan:
+        p = (self.root / relative_path).resolve()
+        if not self._inside(p):
+            raise FileAccessError('Path outside workspace.')
+        if p.exists():
+            raise FileAccessError('Target already exists; overwriting is not allowed.')
+        plan = CreatePlan(uuid.uuid4().hex, relative_path, content, len(content.encode('utf-8')))
+        self._pending = plan
+        return plan
+
+    def decide(self, plan_id: str, approved: bool) -> bool:
+        if self._pending is None or self._pending.id != plan_id:
+            raise FileAccessError('Save request is unknown, expired or already decided.')
+        plan = self._pending
+        self._pending = None
+        if not approved:
+            return False
+        p = (self.root / plan.path).resolve()
+        if not self._inside(p):
+            raise FileAccessError('Path outside workspace.')
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(plan.content, encoding='utf-8')
+        return True
+
+
+def get_workspace_writer(root_path: Optional[Path]) -> Optional[Any]:
+    if not root_path:
+        return None
+    try:
+        if SUPPORTED:
+            return WorkspaceWriter(root_path)
+        return SafeWorkspaceWriterFallback(root_path)
+    except Exception:
+        return SafeWorkspaceWriterFallback(root_path)
+
+
+app.state.workspace_writer = get_workspace_writer(settings.workspace_dir)
+
 
 from pydantic import BaseModel, Field
 
@@ -74,6 +134,8 @@ class RunRequest(BaseModel):
     mode: Optional[str] = None
     schema_: Optional[Dict[str, Any]] = Field(default=None, alias='schema')
     schema_name: Optional[str] = None
+    file_read: Optional[str] = None
+    file_write: Optional[Dict[str, str]] = None
 
     model_config = {'populate_by_name': True}
 
@@ -162,6 +224,7 @@ def list_personas():
         raise HTTPException(status_code=500, detail=str(error))
 
 
+
 def format_session_response(session: Dict[str, Any], store: SessionStore) -> Dict[str, Any]:
     messages = store.get_messages(session['id'])
     history = [{'role': m['role'], 'content': m['content']} for m in messages]
@@ -248,6 +311,7 @@ def select_session(session_id: str, user_id: str = 'default'):
     return format_session_response(sess, app.state.session_store)
 
 
+
 @app.get('/api/profile')
 def get_profile(user_id: str = 'default'):
     return app.state.session_store.get_profile(user_id)
@@ -261,6 +325,7 @@ def save_profile(req: ProfileRequest):
         explanation_level=req.explanation_level,
         preferred_persona=req.preferred_persona,
     )
+
 
 
 @app.get('/api/retrieval/sources')
@@ -311,6 +376,7 @@ def ingest_documents(req: IngestRequest):
         raise
     except Exception:
         raise HTTPException(status_code=500, detail='Ingestion failed.')
+
 
 
 @app.get('/api/prompts')
@@ -413,6 +479,7 @@ def get_run_history(run_id: str):
     return events
 
 
+
 @app.post('/api/runs')
 def start_run(request: RunRequest):
     message = request.message.strip()
@@ -448,6 +515,13 @@ def start_run(request: RunRequest):
     personas = load_personas()
     saved_history = app.state.session_store.get_messages(session_id)
 
+    attachment = None
+    if request.file_read and app.state.workspace_writer:
+        try:
+            attachment = app.state.workspace_writer.read_text(request.file_read.strip())
+        except FileAccessError as err:
+            raise HTTPException(status_code=422, detail=str(err))
+
     to_send, user_content, retrieved_results, formatted_context = assemble_turn(
         system_prompt=base_prompt,
         user_text=message,
@@ -456,8 +530,10 @@ def start_run(request: RunRequest):
         active_persona=session_persona,
         session_store=app.state.session_store,
         user_id='default',
+        attachment=attachment,
         retrieval_store=app.state.vector_store,
         top_k=3,
+        file_enabled=(app.state.workspace_writer is not None),
     )
 
     target_schema = request.schema_
@@ -511,7 +587,20 @@ def start_run(request: RunRequest):
         'form_waiting': False,
         'form_schema': None,
         'form_response': None,
+        'approval_waiting': False,
+        'approval_plan': None,
+        'approval_decision': None,
     }
+
+    if request.file_write and app.state.workspace_writer:
+        path = request.file_write.get('path', '')
+        content = request.file_write.get('content', '')
+        try:
+            plan = app.state.workspace_writer.prepare_create(path, content)
+            app.state.runs[stream.run_id]['approval_plan'] = plan
+            app.state.runs[stream.run_id]['approval_waiting'] = True
+        except FileAccessError as err:
+            raise HTTPException(status_code=422, detail=str(err))
 
     return {'run_id': stream.run_id, 'session_id': session_id}
 
@@ -525,6 +614,30 @@ def cancel_run(run_id: str):
         raise HTTPException(status_code=400, detail='Run already finished.')
     run['cancelled'] = True
     return {'run_id': run_id, 'status': 'cancelled'}
+
+
+@app.post('/api/runs/{run_id}/approve')
+def approve_run(run_id: str):
+    run = app.state.runs.get(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail='Run not found.')
+    if not run.get('approval_plan') or run.get('approval_decision') is not None:
+        raise HTTPException(status_code=400, detail='No pending approval for this run.')
+    run['approval_decision'] = True
+    run['approval_waiting'] = False
+    return {'run_id': run_id, 'status': 'approved'}
+
+
+@app.post('/api/runs/{run_id}/reject')
+def reject_run(run_id: str):
+    run = app.state.runs.get(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail='Run not found.')
+    if not run.get('approval_plan') or run.get('approval_decision') is not None:
+        raise HTTPException(status_code=400, detail='No pending approval for this run.')
+    run['approval_decision'] = False
+    run['approval_waiting'] = False
+    return {'run_id': run_id, 'status': 'rejected'}
 
 
 async def generate_events(run: Dict[str, Any]):
@@ -551,6 +664,37 @@ async def generate_events(run: Dict[str, Any]):
                 for r in retrieved
             ]
             yield to_sse(stream.emit('tool_result', tool='retrieval', sources=sources))
+
+        if run.get('approval_plan'):
+            plan = run['approval_plan']
+            yield to_sse(
+                stream.emit(
+                    'approval_request',
+                    action='write',
+                    path=plan.path,
+                    size_bytes=plan.size_bytes,
+                    plan_id=plan.id,
+                )
+            )
+            while run.get('approval_waiting'):
+                if run.get('cancelled'):
+                    break
+                await asyncio.sleep(0.05)
+
+            if run.get('approval_decision') is True:
+                if app.state.workspace_writer:
+                    try:
+                        app.state.workspace_writer.decide(plan.id, True)
+                    except Exception:
+                        pass
+                yield to_sse(stream.emit('tool_result', tool='write', status='approved', path=plan.path))
+            elif run.get('approval_decision') is False:
+                if app.state.workspace_writer:
+                    try:
+                        app.state.workspace_writer.decide(plan.id, False)
+                    except Exception:
+                        pass
+                yield to_sse(stream.emit('tool_result', tool='write', status='rejected', path=plan.path))
 
         if run.get('cancelled'):
             yield to_sse(stream.done('cancelled'))
@@ -646,6 +790,7 @@ def run_events(run_id: str):
     )
 
 
+
 @app.post('/api/forms/validate')
 def validate_form(payload: Dict[str, Any]):
     schema = payload.get('schema')
@@ -667,6 +812,7 @@ def submit_form_response(run_id: str, req: FormResponseRequest):
     run['form_response'] = req.answers
     run['form_waiting'] = False
     return {'run_id': run_id, 'status': 'resumed', 'received': req.answers}
+
 
 
 @app.get('/api/artifacts')
@@ -724,6 +870,7 @@ def export_artifact(artifact_id: str):
         return PlainTextResponse(content, media_type='text/markdown')
     except ArtifactError as err:
         raise HTTPException(status_code=404, detail=str(err))
+
 
 
 @app.post('/api/snapshots')
