@@ -65,11 +65,14 @@ class SnapshotStore:
         now = time.time()
         data_json = json.dumps(cleaned_data, ensure_ascii=False)
 
-        with self._lock, self.conn:
-            self.conn.execute('''
-                INSERT INTO snapshots (snapshot_id, title, snapshot_type, data_json, created_at)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (snapshot_id, title, snapshot_type, data_json, now))
+        try:
+            with self._lock, self.conn:
+                self.conn.execute('''
+                    INSERT INTO snapshots (snapshot_id, title, snapshot_type, data_json, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (snapshot_id, title, snapshot_type, data_json, now))
+        except sqlite3.IntegrityError:
+            raise ExportError(f'Snapshot {snapshot_id!r} already exists.')
 
         return self.get_snapshot(snapshot_id)
 
