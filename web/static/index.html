@@ -1,292 +1,767 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sensai Web Chat</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 780px; margin: 2rem auto; padding: 0 1rem; color: #222; }
-    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: .8rem; margin-bottom: 1.5rem; }
-    #log { white-space: pre-wrap; border: 1px solid #ccc; border-radius: 6px; padding: 1rem; min-height: 12rem; max-height: 28rem; overflow-y: auto; background: #fafafa; }
-    .user { font-weight: bold; margin-top: 1rem; color: #0d47a1; }
-    .assistant { margin-top: .4rem; line-height: 1.5; color: #212121; }
-    .sys-note { color: #666; font-style: italic; font-size: .85rem; margin-top: .5rem; }
-    .error { color: #b00020; font-weight: 500; margin-top: .4rem; }
-    form { display: flex; gap: .5rem; margin-top: 1rem; }
-    input[type="text"] { flex: 1; padding: .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
-    button { padding: .6rem 1.2rem; border-radius: 4px; border: 1px solid #ccc; background: #fff; cursor: pointer; font-size: .95rem; font-weight: 500; }
-    button:hover { background: #f0f0f0; }
-    button.primary { background: #0066cc; color: #fff; border-color: #0052a3; }
-    button.primary:hover { background: #0052a3; }
-    button:disabled { opacity: .6; cursor: not-allowed; }
-    .meta-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: .5rem; }
-    .settings-panel { margin-bottom: 1rem; padding: .8rem; background: #f1f3f5; border-radius: 6px; font-size: .85rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-    .settings-panel label { display: flex; gap: .3rem; align-items: center; }
-    .settings-panel input, .settings-panel select { padding: .3rem .5rem; border: 1px solid #ccc; border-radius: 4px; font-size: .85rem; }
-    #status { color: #666; font-size: .9rem; margin-top: .6rem; }
-    #budget-stats { font-size: .85rem; color: #555; background: #e8f5e9; padding: .3rem .6rem; border-radius: 4px; border: 1px solid #c8e6c9; }
-    .share-box { margin-top: 1rem; padding: .6rem; background: #e3f2fd; border-radius: 4px; font-size: .9rem; display: none; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sensai</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+:root{
+  --acc:oklch(0.5 0.16 262);--accdeep:oklch(0.38 0.128 262);--acctint:oklch(0.94 0.03 262);--side:oklch(0.945 0.03 262);
+  --sessact:oklch(0.88 0.06 262);--user:oklch(0.5 0.16 262);--userink:#fff;--onacc:#fff;--code:oklch(0.23 0.05 262);--codeink:#e8ebf5;
+  --src:oklch(0.95 0.035 35);--srcb:oklch(0.85 0.08 35);--srcink:oklch(0.45 0.14 35);--panel:oklch(0.975 0.012 35);
+  --acc2ink:oklch(0.48 0.14 35);--accsoft:oklch(0.9 0.05 262);
+  --ok:oklch(0.46 0.09 150);--oksoft:oklch(0.94 0.035 150);--warn:oklch(0.47 0.1 65);--warnsoft:oklch(0.94 0.045 80);
+  --err:oklch(0.48 0.14 28);--errsoft:oklch(0.95 0.03 28);--muted:#555a66;--mutedsoft:#e4e7ec;
+  --line:#e1e4ea;--line2:#d5d9e0;--ink:#14161b;--sub:#5b606b;--bg:#f5f6f8;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--acc)} a:hover{color:var(--accdeep)}
+textarea,input,button{font-family:inherit}
+button{cursor:pointer;color:var(--ink)}
+button:disabled{cursor:not-allowed}
+.mono{font-family:var(--mono)}
+.label{font-size:11px;color:var(--sub);font-family:var(--mono);letter-spacing:.08em}
+.app{height:100vh;display:flex;min-width:0}
+.hidden{display:none!important}
+/* sidebar */
+aside.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.brand{padding:18px 18px 14px;display:flex;flex-direction:column;gap:2px}
+.brand .row{display:flex;align-items:center;gap:9px}
+.brand .dot{width:12px;height:12px;border-radius:3px;background:var(--acc)}
+.brand b{font-weight:600;font-size:18px;letter-spacing:-.01em}
+.brand small{font-size:12px;color:var(--sub)}
+.newchat{width:100%;text-align:left;border:1px solid var(--line2);background:#fff;border-radius:8px;padding:9px 12px;font-size:14px}
+.sessions{flex:1;overflow:auto;padding:0 8px 8px;display:flex;flex-direction:column;gap:2px}
+.sess{text-align:left;border:0;padding:9px 10px;border-radius:7px;display:flex;flex-direction:column;gap:2px;background:transparent}
+.sess.on{background:var(--sessact)} .sess.on .t{font-weight:600}
+.sess .t{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.sess .m{font-size:12px;color:var(--sub)}
+.sidefoot{border-top:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:1px;font-size:13px}
+.sidefoot a,.sidefoot button{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:6px;border:0;background:transparent;font-size:13px;color:var(--ink);text-align:left;text-decoration:none}
+.sidefoot a:hover,.sidefoot button:hover{background:rgba(20,22,27,.05)}
+.sidefoot span+span{color:var(--sub)}
+/* main */
+main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+header.top{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap;position:relative;z-index:5}
+.titlebox{min-width:0;flex:1 1 220px;display:flex;flex-direction:column;gap:2px}
+#title{align-self:flex-start;border:0;background:none;font-size:16px;font-weight:600;padding:0;cursor:text;text-align:left}
+#rename{font-size:16px;font-weight:600;border:1px solid var(--acc);border-radius:6px;padding:2px 6px;background:#fff;color:var(--ink);outline:none;max-width:320px}
+#meta{font-size:12px;color:var(--sub)}
+.seg{display:flex;background:#e8ebf0;border-radius:8px;padding:3px;gap:2px}
+.seg button{border:0;padding:6px 11px;border-radius:6px;font-size:13px;background:transparent;color:var(--muted)}
+.seg button.on{background:var(--acc);color:var(--onacc);box-shadow:0 1px 2px rgba(20,22,27,.12)}
+.seg.light button.on{background:#fff;color:var(--ink)}
+.btn{border:1px solid var(--line2);background:#fff;border-radius:8px;padding:6px 10px;font-size:13px}
+.btn.on{background:var(--accsoft)}
+.btn:disabled{opacity:.45}
+.btn.primary{border-color:var(--accdeep);background:var(--accdeep);color:var(--onacc);padding:6px 12px}
+.modelbtn{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px}
+.modelbtn i{width:7px;height:7px;border-radius:50%;display:inline-block}
+.rel{position:relative}
+.pop{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 24px rgba(20,22,27,.10)}
+.pop input{border:1px solid var(--line2);border-radius:6px;padding:7px 9px;font-family:var(--mono);font-size:13px;background:var(--bg);color:var(--ink)}
+.pop .hint{font-size:12px;color:var(--sub);line-height:1.5}
+.warnbar{padding:7px 20px;font-size:13px;background:oklch(0.95 0.04 80);color:oklch(0.42 0.1 65);border-bottom:1px solid oklch(0.88 0.06 80)}
+.body{flex:1;display:flex;min-height:0}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+#thread{flex:1;overflow:auto}
+.thread-in{margin:0 auto;padding:28px 24px 16px;display:flex;flex-direction:column;gap:24px;max-width:760px}
+.empty{padding:10vh 0 0;display:flex;flex-direction:column;gap:12px}
+.empty h2{margin:0;font-size:26px;font-weight:600;letter-spacing:-.015em}
+.empty p{margin:0;font-size:15px;color:var(--sub);line-height:1.55;max-width:520px;text-wrap:pretty}
+.note{align-self:center;font-size:12px;color:var(--sub);font-family:var(--mono);padding:4px 12px;border:1px dashed #cfd3db;border-radius:999px;text-align:center}
+.umsg{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.bubble{max-width:85%;background:var(--user);color:var(--userink);padding:10px 14px;border-radius:12px;font-size:15px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.attachnote{font-family:var(--mono);font-size:12px;color:var(--sub)}
+.amsg{display:flex;flex-direction:column;gap:12px}
+.ahead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ahead b{font-size:13px;font-weight:600}
+.ahead .p{font-size:12px;color:var(--sub)}
+.pill{padding:2px 8px;border-radius:999px;font-family:var(--mono);font-size:11px}
+.thinking{display:flex;gap:12px;align-items:baseline;font-size:14px;color:var(--sub);line-height:1.5}
+.thinking .mono{color:var(--acc);min-width:40px}
+.tools{display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:12px;color:var(--sub)}
+.tools div{display:flex;gap:8px}
+.tools .ar{color:var(--acc)} .tools .tn{color:var(--ink)}
+.abody{display:flex;flex-direction:column;gap:12px;font-size:15.5px;line-height:1.65}
+.abody p{margin:0;white-space:pre-wrap;text-wrap:pretty;overflow-wrap:anywhere}
+.abody pre{margin:0;background:var(--code);color:var(--codeink);padding:14px 16px;border-radius:8px;font-family:var(--mono);font-size:13px;line-height:1.6;overflow-x:auto}
+.cursor{color:var(--acc)}
+.approval{border:1px solid oklch(0.82 0.08 75);background:oklch(0.96 0.035 80);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.approval .r{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.approval .r span:first-child{font-weight:600;font-size:14px}
+.approval .r span+span{font-size:12px;color:oklch(0.45 0.1 65);font-family:var(--mono)}
+.approval .path{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-family:var(--mono);font-size:13px}
+.approval .path span+span{color:var(--sub)}
+.approval .small{font-size:13px;color:#3b3f49}
+.approval .acts{display:flex;gap:8px;flex-wrap:wrap}
+.b-dark{border:0;background:var(--ink);color:var(--bg);border-radius:7px;padding:8px 16px;font-size:14px}
+.b-dark:hover{color:var(--bg)}
+.b-out{border:1px solid #c8cdd6;background:#fff;color:var(--ink);border-radius:7px;padding:8px 16px;font-size:14px}
+.b-link{border:0;background:none;color:var(--sub);padding:8px 6px;font-size:13px;text-decoration:underline}
+.apdone,.metrics{font-family:var(--mono);font-size:12px;color:var(--sub)}
+.metrics{font-size:11.5px;color:#868b95}
+.sources{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.sources .h{font-size:12px;color:var(--sub)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.src{font-family:var(--mono);font-size:12px;border:1px solid var(--srcb);background:var(--src);color:var(--srcink);padding:4px 8px;border-radius:6px;display:flex;gap:6px}
+.failed{border:1px solid oklch(0.85 0.06 28);background:oklch(0.96 0.025 28);border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.failed b{font-size:14px;color:var(--err)} .failed div{font-size:14px;line-height:1.55}
+.cancelled{font-size:13px;color:var(--sub);border-left:2px solid #c8cdd6;padding-left:10px}
+.trace{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:11.5px;display:flex;flex-direction:column;gap:4px}
+.trace div,.ev{display:grid;grid-template-columns:28px 120px minmax(0,1fr) 56px;gap:8px}
+.trace span:first-child,.trace span:last-child{color:#8d929c} .trace span:last-child{text-align:right}
+.trace span:nth-child(3){color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* composer */
+.composer{padding:10px 24px 16px}
+.composer-in{margin:0 auto;display:flex;flex-direction:column;gap:8px;max-width:760px}
+.sugg{display:flex;gap:6px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.sugg button{border:1px solid var(--line2);background:transparent;border-radius:999px;flex:none;padding:5px 12px;font-size:13px;color:#3b3f49}
+.box{background:#fff;border:1px solid #cfd3db;border-radius:12px;padding:10px 10px 10px 14px;display:flex;flex-direction:column;gap:8px}
+.attached{align-self:flex-start;display:flex;gap:8px;align-items:center;font-family:var(--mono);font-size:12px;background:#e8ebf0;border-radius:6px;padding:4px 6px 4px 9px}
+.attached button{border:0;background:none;color:var(--sub);font-size:13px;padding:0 3px}
+#input{border:0;outline:none;resize:none;background:transparent;font-size:15px;line-height:1.5;color:var(--ink);padding:2px 0}
+.row{display:flex;align-items:center;gap:8px}
+.attachbtn{border:1px solid var(--line);background:transparent;border-radius:7px;padding:6px 10px;font-size:13px;color:#3b3f49}
+.pop.up{right:auto;left:0;top:auto;bottom:calc(100% + 6px);width:300px;padding:10px}
+.cancel{border:1px solid #c8cdd6;background:#fff;border-radius:8px;padding:7px 14px;font-size:14px}
+.send{border:0;background:var(--acc);color:var(--onacc);border-radius:8px;padding:8px 18px;font-size:14px;font-weight:500}
+.send:disabled,.cancel:disabled{opacity:.4}
+.statusline{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);font-family:var(--mono);flex-wrap:wrap}
+.statusline i{width:7px;height:7px;border-radius:50%;flex:none;background:#b6bac3}
+.statusline .tok{margin-left:auto}
+/* inspector */
+aside.insp{width:340px;flex:none;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.insp .h{padding:16px 18px 12px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line)}
+.insp .h b{font-size:15px} .insp .h button{border:0;background:none;color:var(--sub);font-size:13px}
+.rows{padding:14px 18px;display:grid;grid-template-columns:96px minmax(0,1fr);gap:7px 10px;font-size:13px;border-bottom:1px solid var(--line)}
+.rows span:nth-child(odd){color:var(--sub)}
+.rows span:nth-child(even){font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.evlist{flex:1;overflow:auto;padding:0 18px 12px;display:flex;flex-direction:column;gap:6px}
+.evi{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;font-family:var(--mono);font-size:12px;padding:6px 0;border-bottom:1px solid #eceef2}
+.evi>span:first-child,.evi>span:last-child{color:#8d929c}
+.evi>span:nth-child(2){display:flex;flex-direction:column;gap:2px;min-width:0}
+.evi .ty{color:var(--acc2ink);font-weight:500} .evi .sm{color:var(--sub);word-break:break-word}
+.insp .foot{padding:12px 18px;font-size:12px;line-height:1.5;color:var(--sub);border-top:1px solid var(--line)}
+/* settings */
+#scrim{position:fixed;inset:0;background:rgba(20,22,27,.28);z-index:40}
+#settings{position:fixed;top:0;right:0;bottom:0;width:380px;max-width:100%;background:#fff;border-left:1px solid var(--line);z-index:41;display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(20,22,27,.12)}
+#settings .h{padding:18px 20px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line)}
+#settings .h b{font-size:17px}
+#settings .b{padding:18px 20px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.theme{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:10px;text-align:left;background:#fff;border:1px solid var(--line)}
+.theme.on{border:2px solid var(--acc)}
+.sw{display:flex;gap:4px;flex:none}
+.sw i{width:18px;height:18px;border-radius:50%;border:1px solid rgba(20,22,27,.1)}
+.theme .n{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.theme .n b{font-size:14px;font-weight:500} .theme .n small{font-size:12px;color:var(--sub)}
+.theme .act{font-size:12px;color:var(--acc);font-family:var(--mono)}
+.field{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.field select,.field input{border:1px solid var(--line2);border-radius:6px;padding:7px 9px;font-size:13px;background:#fff;color:var(--ink)}
+.sharebox{display:flex;gap:6px}
+.sharebox .u{flex:1;min-width:0;border:1px solid var(--line2);background:var(--bg);border-radius:6px;padding:7px 9px;font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fmts{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;font-family:var(--mono)}
+.fmts a{border:1px solid var(--line2);border-radius:6px;padding:4px 8px;text-decoration:none}
+.warnnote{font-size:12px;line-height:1.5;color:oklch(0.45 0.1 65);background:oklch(0.95 0.04 80);border-radius:6px;padding:8px 10px}
+@media (max-width:900px){aside.side{display:none}aside.insp{position:fixed;right:0;top:0;bottom:0;z-index:30}}
+</style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1 style="margin: 0; font-size: 1.6rem;">Sensai</h1>
-      <small style="color: #666;">Local AI Assistant (X1 & A5)</small>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="row"><span class="dot"></span><b>Sensai</b></div>
+      <small>Local study assistant</small>
     </div>
-    <nav style="display: flex; gap: 1rem; align-items: center;">
-      <a href="/dashboard" style="text-decoration: none; color: #0066cc; font-weight: 500;">Observability Dashboard (EV3) →</a>
-    </nav>
-  </header>
+    <div style="padding:0 12px 10px"><button class="newchat" id="new-chat">+ New chat</button></div>
+    <div class="label" style="padding:8px 18px 6px">SESSIONS</div>
+    <div class="sessions" id="sessions"></div>
+    <div class="sidefoot">
+      <button id="open-profile"><span>Learner profile</span><span id="profile-label">…</span></button>
+      <div style="display:flex;justify-content:space-between;padding:8px 10px"><span>Knowledge</span><span id="knowledge-label" style="color:var(--sub)">…</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 10px"><span>Prompt versions</span><span id="prompt-label" class="mono" style="color:var(--sub);font-size:12px">…</span></div>
+      <a href="/dashboard"><span>Dashboard</span><span>→</span></a>
+      <button id="open-settings"><span>Settings</span><span id="theme-label"></span></button>
+    </div>
+  </aside>
 
-  <div class="settings-panel">
-    <label>
-      <strong>Mode:</strong>
-      <select id="mode-select">
-        <option value="stub">Stub / Simulated</option>
-        <option value="ollama">Ollama HTTP API</option>
-      </select>
+  <main>
+    <header class="top">
+      <div class="titlebox">
+        <button id="title" title="Click to rename">New session</button>
+        <input id="rename" class="hidden">
+        <div id="meta"></div>
+      </div>
+      <div class="seg" id="personas" title="Switching keeps the conversation history"></div>
+      <div class="rel">
+        <button class="btn modelbtn" id="model-btn"><i id="mode-dot"></i><span id="model-text"></span></button>
+        <div class="pop hidden" id="model-pop" style="width:280px">
+          <div class="label">MODEL</div>
+          <input id="model-input">
+          <div class="label">MODE</div>
+          <div class="seg light" id="modes"></div>
+          <div class="hint">Ollama runs your local model. Stub returns canned text without calling a model, which is handy for demos.</div>
+        </div>
+      </div>
+      <button class="btn" id="internals-btn">Run details: off</button>
+      <button class="btn" id="clear-btn">Clear chat</button>
+      <div class="rel">
+        <button class="btn primary" id="share-btn">Share snapshot</button>
+        <div class="pop hidden" id="share-pop" style="width:340px;padding:16px;gap:12px">
+          <b style="font-size:15px">Share a snapshot</b>
+          <div style="font-size:13px;color:#3b3f49;line-height:1.55">Publishes this conversation to a public page. Anyone with the link can read it, no login needed.</div>
+          <button id="publish" style="border:0;background:var(--acc);color:#fff;border-radius:8px;padding:9px 12px;font-size:14px">Publish snapshot</button>
+          <div id="share-result" class="hidden" style="display:flex;flex-direction:column;gap:12px">
+            <div class="sharebox"><div class="u" id="share-url"></div><button class="btn" id="copy-url" style="padding:6px 10px;font-size:12px">Copy</button></div>
+            <div class="fmts" id="share-fmts"></div>
+          </div>
+          <div class="warnnote">Publishing has no authentication yet. Add a token before you deploy Sensai publicly.</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="warnbar hidden" id="stub-bar"></div>
+
+    <div class="body">
+      <div class="col">
+        <div id="thread"><div class="thread-in" id="thread-in"></div></div>
+        <div class="composer"><div class="composer-in">
+          <div class="sugg" id="sugg"></div>
+          <div class="box">
+            <div class="attached hidden" id="attached"><span id="attached-name"></span><button id="unattach" title="Remove">×</button></div>
+            <textarea id="input" rows="2" placeholder="Ask about code or a concept…"></textarea>
+            <div class="row">
+              <div class="rel">
+                <button class="attachbtn" id="attach-btn">Attach file</button>
+                <div class="pop up hidden" id="attach-pop">
+                  <div class="label">WORKSPACE FILE PATH</div>
+                  <input id="attach-input" placeholder="notes/week3-functions.md">
+                  <div class="hint">Only files inside the configured workspace can be attached.</div>
+                </div>
+              </div>
+              <span style="flex:1"></span>
+              <button class="cancel" id="cancel" disabled>Cancel</button>
+              <button class="send" id="send" disabled>Send</button>
+            </div>
+          </div>
+          <div class="statusline"><i id="run-dot"></i><span id="run-line">Ready</span><span class="tok" id="token-line"></span></div>
+        </div></div>
+      </div>
+
+      <aside class="insp hidden" id="insp">
+        <div class="h"><b>Run details</b><button id="insp-hide">Hide</button></div>
+        <div class="rows" id="insp-rows"></div>
+        <div class="label" style="padding:12px 18px 6px">EVENTS</div>
+        <div class="evlist" id="insp-events"></div>
+        <div class="foot">The live event stream can only be read once. This is the copy kept in the browser.</div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<div id="scrim" class="hidden"></div>
+<aside id="settings" class="hidden">
+  <div class="h"><b>Settings</b><button class="btn" id="close-settings">Close</button></div>
+  <div class="b">
+    <div class="label">THEME</div>
+    <div id="themes" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.5">Your theme is saved in this browser.</div>
+    <div class="label" style="padding-top:12px">LEARNER PROFILE</div>
+    <label class="field">Language<input id="prof-lang" placeholder="English"></label>
+    <label class="field">Explanation level
+      <select id="prof-level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select>
     </label>
-    <label>
-      <strong>Model:</strong>
-      <input id="model-input" type="text" value="llama3.2:1b" style="width: 110px;">
-    </label>
+    <button class="btn" id="prof-save">Save profile</button>
+    <div id="prof-msg" style="font-size:12px;color:var(--sub)"></div>
   </div>
+</aside>
 
-  <div class="meta-bar">
-    <div style="display: flex; gap: .5rem; align-items: center;">
-      <label for="persona"><strong>Persona:</strong></label>
-      <select id="persona" style="padding: .4rem; border-radius: 4px; border: 1px solid #ccc;">
-        <option value="">Default (Sensai)</option>
-      </select>
-      <button id="clear-btn" type="button" style="padding: .4rem .8rem; font-size: .85rem;">Clear Chat</button>
-    </div>
-    <div style="display: flex; gap: .5rem; align-items: center;">
-      <span id="budget-stats">Tokens: 0 | Session: 0</span>
-      <button id="share-btn" type="button" style="padding: .4rem .8rem; font-size: .85rem;">Share Snapshot (X3)</button>
-    </div>
-  </div>
+<script>
+const $ = id => document.getElementById(id);
+const SUGGEST = ['Explain recursion with a simple example', 'What is the difference between a list and a tuple?', 'Review my fizzbuzz.py'];
+const PAL = (h1, c1, h2, c2) => ({ acc: `oklch(0.5 ${c1} ${h1})`, accdeep: `oklch(0.38 ${+(c1*0.8).toFixed(3)} ${h1})`, acctint: `oklch(0.94 0.03 ${h1})`, side: `oklch(0.945 0.03 ${h1})`, sessact: `oklch(0.88 0.06 ${h1})`, user: `oklch(0.5 ${c1} ${h1})`, userink: '#ffffff', onacc: '#ffffff', code: `oklch(0.23 0.05 ${h1})`, codeink: '#e8ebf5', src: `oklch(0.95 0.035 ${h2})`, srcb: `oklch(0.85 0.08 ${h2})`, srcink: `oklch(0.45 ${c2} ${h2})`, panel: `oklch(0.975 0.012 ${h2})`, acc2ink: `oklch(0.48 ${c2} ${h2})`, accsoft: `oklch(0.9 0.05 ${h1})` });
+const THEMES = [
+  { id: 'neutral', name: 'Neutral', desc: 'Greys and ink, no accent color', vars: { acc: '#23262d', accdeep: '#14161b', acctint: '#e8ebf0', side: '#eceef2', sessact: '#dfe2e8', user: '#e8ebf0', userink: '#14161b', onacc: '#ffffff', code: '#14161b', codeink: '#e4e7ec', src: '#ffffff', srcb: '#e1e4ea', srcink: '#3b3f49', panel: '#ffffff', acc2ink: '#14161b', accsoft: '#e1e4ea' } },
+  { id: 'indigo', name: 'Indigo + Coral', desc: 'Default', vars: PAL(262, 0.16, 35, 0.14) },
+  { id: 'teal', name: 'Teal + Amber', desc: 'Calm, warm highlights', vars: PAL(200, 0.1, 65, 0.13) },
+  { id: 'violet', name: 'Violet + Green', desc: 'Bolder contrast', vars: PAL(300, 0.17, 150, 0.12) },
+  { id: 'cobalt', name: 'Cobalt + Pink', desc: 'Bright and playful', vars: PAL(245, 0.15, 355, 0.16) }
+];
+const STATUS = {
+  thinking: { label: 'thinking', fg: 'var(--acc)', bg: 'var(--acctint)' },
+  running: { label: 'running', fg: 'var(--acc)', bg: 'var(--acctint)' },
+  awaiting: { label: 'pending approval', fg: 'var(--warn)', bg: 'var(--warnsoft)' },
+  completed: { label: 'completed', fg: 'var(--ok)', bg: 'var(--oksoft)' },
+  cancelled: { label: 'cancelled', fg: 'var(--muted)', bg: 'var(--mutedsoft)' },
+  failed: { label: 'failed', fg: 'var(--err)', bg: 'var(--errsoft)' }
+};
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
 
-  <div id="share-link-box" class="share-box"></div>
-  <div id="log"></div>
+const S = {
+  sessions: [], active: null, personas: [], messages: [],
+  theme: store.get('sensai_theme', 'indigo'),
+  model: store.get('sensai_model', 'llama3.2:1b'), mode: store.get('sensai_mode', 'stub'),
+  internals: false, attached: null, shareUrl: null, shareId: null,
+  running: null, source: null, tick: null
+};
 
-  <form id="form">
-    <input id="message" type="text" autocomplete="off" placeholder="Ask Sensai a question...">
-    <button id="send" class="primary">Send</button>
-    <button id="cancel" type="button" disabled>Cancel</button>
-  </form>
-  <div id="status">Ready.</div>
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    let detail = 'HTTP ' + res.status;
+    try { const j = await res.json(); if (j.detail) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch (e) {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+const personaName = id => { const p = S.personas.find(x => x.id === id); return p ? p.name : 'Default'; };
+const curSession = () => S.sessions.find(s => s.id === S.active);
+const fmtKB = b => (b / 1024).toFixed(1) + ' KB';
 
-  <script>
-    const log = document.getElementById('log');
-    const form = document.getElementById('form');
-    const input = document.getElementById('message');
-    const send = document.getElementById('send');
-    const cancel = document.getElementById('cancel');
-    const status = document.getElementById('status');
-    const personaSelect = document.getElementById('persona');
-    const clearBtn = document.getElementById('clear-btn');
-    const shareBtn = document.getElementById('share-btn');
-    const shareBox = document.getElementById('share-link-box');
-    const budgetStats = document.getElementById('budget-stats');
-    const modeSelect = document.getElementById('mode-select');
-    const modelInput = document.getElementById('model-input');
+/* ---------- theme ---------- */
+function applyTheme(id) {
+  const t = THEMES.find(x => x.id === id) || THEMES[1];
+  for (const k in t.vars) document.documentElement.style.setProperty('--' + k, t.vars[k]);
+  S.theme = t.id; store.set('sensai_theme', t.id);
+  $('theme-label').textContent = t.name;
+  renderThemes();
+}
+function renderThemes() {
+  const box = $('themes'); box.textContent = '';
+  THEMES.forEach(t => {
+    const b = el('button', 'theme' + (t.id === S.theme ? ' on' : ''));
+    const sw = el('span', 'sw');
+    [t.vars.acc, t.vars.acc2ink, t.vars.side].forEach(c => { const i = el('i'); i.style.background = c; sw.appendChild(i); });
+    const n = el('span', 'n'); n.append(el('b', '', t.name), el('small', '', t.desc));
+    b.append(sw, n);
+    if (t.id === S.theme) b.appendChild(el('span', 'act', 'Active'));
+    b.onclick = () => applyTheme(t.id);
+    box.appendChild(b);
+  });
+}
 
-    let currentSource = null;
-    let currentRunId = null;
-    let sessionId = localStorage.getItem('sensai_session_id') || ('sess_' + Math.random().toString(36).substring(2, 10));
-    localStorage.setItem('sensai_session_id', sessionId);
+/* ---------- sessions ---------- */
+function when(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  const y = new Date(now - 864e5);
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+function renderSessions() {
+  const box = $('sessions'); box.textContent = '';
+  S.sessions.forEach(s => {
+    const b = el('button', 'sess' + (s.id === S.active ? ' on' : ''));
+    b.title = S.running && s.id !== S.active ? 'Finish or cancel the current run first' : '';
+    const n = s.turns_count || 0;
+    b.append(el('span', 't', s.title), el('span', 'm', `${personaName(s.persona_id)} · ${n ? n + ' messages' : 'empty'} · ${when(s.updated_at)}`));
+    b.onclick = () => selectSession(s.id);
+    box.appendChild(b);
+  });
+}
+async function loadSessions() {
+  S.sessions = await api('/api/sessions');
+  S.sessions.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+}
+async function selectSession(id) {
+  if (S.running) return;
+  S.active = id; store.set('sensai_session_id', id);
+  S.shareUrl = null; resetShare();
+  const sess = await api('/api/sessions/' + encodeURIComponent(id));
+  const i = S.sessions.findIndex(s => s.id === id);
+  if (i >= 0) S.sessions[i] = sess;
+  S.messages = (sess.messages || []).filter(m => m.role === 'user' || m.role === 'assistant').map(m =>
+    m.role === 'user' ? { role: 'user', text: m.content } : { role: 'assistant', status: 'completed', persona: sess.persona_id, text: m.content, tools: [], sources: [], events: [], metrics: null, history: true });
+  renderAll(true);
+}
+async function newChat() {
+  if (S.running) return;
+  const sess = await post('/api/sessions', { title: 'New session' });
+  S.sessions.unshift(sess);
+  await selectSession(sess.id);
+}
+async function ensureSession() {
+  if (S.active && curSession()) return;
+  const saved = store.get('sensai_session_id', null);
+  if (saved && S.sessions.some(s => s.id === saved)) return selectSession(saved);
+  if (S.sessions.length) return selectSession(S.sessions[0].id);
+  return newChat();
+}
 
-    let sessionTotalTokens = 0;
-    let currentMessages = [];
-    let savedPersonaId = null;
-
-    fetch(`/api/sessions/${sessionId}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (!data) return;
-        savedPersonaId = data.persona_id;
-        if (savedPersonaId) personaSelect.value = savedPersonaId;
-        if (Array.isArray(data.messages)) {
-          data.messages.forEach(m => {
-            if (m.role === 'user') {
-              addLine('user', 'You: ' + m.content);
-              currentMessages.push({role: 'user', content: m.content});
-            } else if (m.role === 'assistant') {
-              addLine('assistant', m.content);
-              currentMessages.push({role: 'assistant', content: m.content});
-            }
-          });
-        }
-      })
-      .catch(() => {});
-
-    // Load available personas
-    fetch('/api/personas')
-      .then(res => res.ok ? res.json() : [])
-      .then(personas => {
-        personas.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.id;
-          opt.textContent = `${p.name} (${p.role})`;
-          personaSelect.appendChild(opt);
-        });
-        if (savedPersonaId) personaSelect.value = savedPersonaId;
-      })
-      .catch(() => {});
-
-    // Persona switch mid-session without losing history (A5)
-    personaSelect.addEventListener('change', async () => {
-      const personaId = personaSelect.value || null;
-      try {
-        await fetch(`/api/sessions/${sessionId}/persona`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({persona_id: personaId}),
-        });
-        const pName = personaSelect.options[personaSelect.selectedIndex].text;
-        addLine('sys-note', `[Switched persona to: ${pName} — conversation history retained]`);
-      } catch (err) {
-        console.error('Failed to update persona:', err);
+/* ---------- rendering ---------- */
+function splitBlocks(text) {
+  const out = []; const re = /```[^\n]*\n?([\s\S]*?)(```|$)/g; let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push({ code: false, text: text.slice(last, m.index).replace(/^\n+|\n+$/g, '') });
+    out.push({ code: true, text: m[1].replace(/\n$/, '') });
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push({ code: false, text: text.slice(last).replace(/^\n+|\n+$/g, '') });
+  return out.filter(b => b.code || b.text);
+}
+function renderAssistant(m, parent) {
+  const st = STATUS[m.status];
+  const w = el('div', 'amsg');
+  const head = el('div', 'ahead');
+  const pill = el('span', 'pill', st.label); pill.style.background = st.bg; pill.style.color = st.fg;
+  head.append(el('b', '', 'Sensai'), el('span', 'p', personaName(m.persona)), pill);
+  w.appendChild(head);
+  if (m.status === 'thinking') {
+    const t = el('div', 'thinking');
+    t.append(el('span', 'mono', (m.elapsed / 1000).toFixed(1) + 's'), el('span', '', 'Thinking. Local models can take a few seconds before the first words appear.'));
+    w.appendChild(t);
+  }
+  if (m.tools.length) {
+    const t = el('div', 'tools');
+    m.tools.forEach(x => { const r = el('div'); r.append(el('span', 'ar', x.arrow), el('span', 'tn', x.tool), el('span', '', x.detail)); t.appendChild(r); });
+    w.appendChild(t);
+  }
+  if (m.text) {
+    const body = el('div', 'abody');
+    const blocks = splitBlocks(m.text);
+    blocks.forEach((b, i) => {
+      if (b.code) body.appendChild(el('pre', '', b.text));
+      else {
+        const p = el('p', '', b.text);
+        if (m.status === 'running' && i === blocks.length - 1) p.appendChild(el('span', 'cursor', '▍'));
+        body.appendChild(p);
       }
     });
+    w.appendChild(body);
+  }
+  const ap = m.approval;
+  if (ap && ap.state === 'pending') {
+    const c = el('div', 'approval');
+    const r1 = el('div', 'r'); r1.append(el('span', '', 'Sensai wants to create a file'), el('span', '', 'run paused'));
+    const r2 = el('div', 'path'); r2.append(el('span', '', ap.path), el('span', '', fmtKB(ap.size_bytes || 0)));
+    const acts = el('div', 'acts');
+    const a = el('button', 'b-dark', 'Approve'), r = el('button', 'b-out', 'Reject'), x = el('button', 'b-link', 'Cancel run');
+    a.onclick = () => decide(true); r.onclick = () => decide(false); x.onclick = cancelRun;
+    acts.append(a, r, x);
+    c.append(r1, r2, el('div', 'small', 'Nothing is written until you approve. The answer continues after you decide.'), acts);
+    w.appendChild(c);
+  } else if (ap) {
+    w.appendChild(el('div', 'apdone', ap.state === 'approved' ? `approved · created ${ap.path} (${fmtKB(ap.size_bytes || 0)})` : ap.state === 'rejected' ? 'rejected · no file was created' : 'approval request cancelled with the run'));
+  }
+  if (m.sources.length && m.status !== 'thinking') {
+    const s = el('div', 'sources'); s.appendChild(el('div', 'h', 'Based on your notes'));
+    const ch = el('div', 'chips');
+    m.sources.forEach(x => { const c = el('span', 'src'); c.append(el('span', '', x.path), el('span', '', x.lines)); ch.appendChild(c); });
+    s.appendChild(ch); w.appendChild(s);
+  }
+  if (m.status === 'failed') {
+    const f = el('div', 'failed'); f.append(el('b', '', 'This run failed'), el('div', '', m.error || 'Unknown error.'));
+    if (m.prompt) { const rb = el('button', 'b-out', 'Try again'); rb.style.cssText = 'align-self:flex-start;padding:6px 12px;font-size:13px'; rb.onclick = () => send(m.prompt); f.appendChild(rb); }
+    w.appendChild(f);
+  }
+  if (m.status === 'cancelled') w.appendChild(el('div', 'cancelled', `You stopped this run after ${m.metrics ? (m.metrics.latency / 1000).toFixed(1) : '0.0'} s. ${m.text ? 'The partial answer above is kept.' : 'No answer was generated.'}`));
+  if (m.metrics && m.status !== 'failed') w.appendChild(el('div', 'metrics', `${m.metrics.tokens} tokens · ${(m.metrics.latency / 1000).toFixed(1)} s · run ${m.runId}`));
+  parent.appendChild(w);
+}
+function renderThread(scroll) {
+  const box = $('thread-in'); box.textContent = '';
+  if (!S.messages.length) {
+    const e = el('div', 'empty'); const prof = S.profile || {};
+    e.append(el('h2', '', 'What are you studying today?'),
+      el('p', '', `Ask about code or a concept. Sensai answers in ${prof.language || 'English'} at a ${prof.explanation_level || 'beginner'} level. You can change that in Settings.`));
+    box.appendChild(e);
+  }
+  S.messages.forEach(m => {
+    if (m.role === 'note') box.appendChild(el('div', 'note', m.text));
+    else if (m.role === 'user') {
+      const u = el('div', 'umsg'); u.appendChild(el('div', 'bubble', m.text));
+      if (m.attach) u.appendChild(el('div', 'attachnote', 'attached · ' + m.attach));
+      box.appendChild(u);
+    } else renderAssistant(m, box);
+  });
+  if (scroll || S.running) { const t = $('thread'); t.scrollTop = t.scrollHeight; }
+}
+function focusMsg() {
+  const a = S.messages.filter(m => m.role === 'assistant' && !m.history);
+  return (S.running && S.messages.find(m => m.runId === S.running)) || a[a.length - 1] || null;
+}
+function renderChrome() {
+  const s = curSession();
+  $('title').textContent = s ? s.title : 'New session';
+  const n = S.messages.filter(m => m.role !== 'note').length;
+  const total = S.messages.reduce((a, m) => a + (m.metrics ? m.metrics.tokens : 0), 0);
+  $('meta').textContent = `${n} messages · ${total.toLocaleString()} tokens this session · ${personaName(s && s.persona_id)}`;
+  // personas
+  const pb = $('personas'); pb.textContent = '';
+  [{ id: null, name: 'Default' }, ...S.personas].forEach(p => {
+    const b = el('button', (s && (s.persona_id || null) === p.id) ? 'on' : '', p.name);
+    b.title = p.role || 'Balanced answers';
+    b.onclick = () => setPersona(p.id);
+    pb.appendChild(b);
+  });
+  // model / mode
+  $('model-text').textContent = `${S.model} · ${S.mode === 'ollama' ? 'Ollama' : 'Stub'}`;
+  $('mode-dot').style.background = S.mode === 'ollama' ? 'var(--ok)' : 'var(--warn)';
+  const mb = $('modes'); mb.textContent = '';
+  [['ollama', 'Ollama'], ['stub', 'Stub']].forEach(([id, name]) => {
+    const b = el('button', S.mode === id ? 'on' : '', name); b.style.flex = '1';
+    b.onclick = () => { S.mode = id; store.set('sensai_mode', id); renderChrome(); };
+    mb.appendChild(b);
+  });
+  const sb = $('stub-bar'); sb.classList.toggle('hidden', S.mode !== 'stub');
+  sb.textContent = `Stub mode: replies are simulated and don't come from ${S.model}.`;
+  $('internals-btn').textContent = S.internals ? 'Run details: on' : 'Run details: off';
+  $('internals-btn').classList.toggle('on', S.internals);
+  $('clear-btn').disabled = !!S.running; $('new-chat').disabled = !!S.running;
+  $('new-chat').style.opacity = S.running ? .45 : 1;
+  // composer
+  const hasText = !!$('input').value.trim();
+  $('send').disabled = !!S.running || !hasText;
+  $('cancel').disabled = !S.running;
+  const users = S.messages.filter(m => m.role === 'user').length;
+  const sg = $('sugg'); sg.textContent = '';
+  if (!S.running && users < 3 && !S.internals) SUGGEST.forEach(t => { const b = el('button', '', t); b.onclick = () => send(t); sg.appendChild(b); });
+  $('attached').classList.toggle('hidden', !S.attached);
+  $('attached-name').textContent = S.attached || '';
+  // status line
+  const f = focusMsg(); let dot = '#b6bac3', line = 'Ready';
+  if (f) {
+    dot = STATUS[f.status].fg;
+    if (S.running) line = f.status === 'thinking' ? `run ${f.runId} · thinking · waiting for the first token` : f.status === 'awaiting' ? `run ${f.runId} · paused · waiting for your approval` : `run ${f.runId} · streaming`;
+    else line = `last run ${f.runId} · ${f.status}${f.metrics ? ' · ' + (f.metrics.latency / 1000).toFixed(1) + ' s' : ''}`;
+  }
+  $('run-dot').style.background = dot; $('run-line').textContent = line;
+  $('token-line').textContent = `this reply ${f && f.metrics ? f.metrics.tokens : 0} · session ${total.toLocaleString()} tokens`;
+  // inspector
+  $('insp').classList.toggle('hidden', !S.internals);
+  if (S.internals) renderInspector(f);
+  renderSessions();
+}
+function renderInspector(f) {
+  const rows = $('insp-rows'), evs = $('insp-events'); rows.textContent = ''; evs.textContent = '';
+  if (!f) { rows.appendChild(el('span', '', 'No run yet')); return; }
+  const data = [['Run', f.runId], ['Status', STATUS[f.status].label], ['Model', `${f.model || S.model} · ${f.mode === 'ollama' ? 'Ollama' : 'Stub'}`], ['Persona', personaName(f.persona)], ['Prompt', S.promptVer || '—'],
+    ['Tokens', f.metrics ? String(f.metrics.tokens) : '…'], ['Latency', f.metrics ? Math.round(f.metrics.latency) + ' ms' : (f.elapsed / 1000).toFixed(1) + ' s so far']];
+  data.forEach(([k, v]) => rows.append(el('span', '', k), el('span', '', v)));
+  f.events.forEach(e => {
+    const r = el('div', 'evi'); const mid = el('span'); mid.append(el('span', 'ty', e.type), el('span', 'sm', e.summary));
+    r.append(el('span', '', '#' + e.seq), mid, el('span', '', e.t)); evs.appendChild(r);
+  });
+}
+let raf = 0;
+function renderAll(scroll) {
+  if (scroll) { renderThread(true); renderChrome(); return; }
+  if (raf) return;
+  raf = requestAnimationFrame(() => { raf = 0; renderThread(); renderChrome(); });
+}
 
-    clearBtn.addEventListener('click', async () => {
-      try {
-        await fetch(`/api/sessions/${sessionId}/clear`, { method: 'POST' });
-        log.innerHTML = '';
-        currentMessages = [];
-        sessionTotalTokens = 0;
-        budgetStats.textContent = 'Tokens: 0 | Session: 0';
-        addLine('sys-note', 'Conversation cleared; system prompt retained.');
-      } catch (err) {
-        console.error('Clear failed:', err);
-      }
-    });
-
-    shareBtn.addEventListener('click', async () => {
-      if (currentMessages.length === 0) {
-        alert('No messages to share yet.');
-        return;
-      }
-      try {
-        const res = await fetch('/api/snapshots', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            title: 'Shared Sensai Session',
-            type: 'conversation',
-            data: { messages: currentMessages },
-          }),
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        const url = window.location.origin + '/p/' + data.snapshot_id;
-        shareBox.style.display = 'block';
-        shareBox.innerHTML = `Public URL (no login required): <a href="${url}" target="_blank">${url}</a> | <a href="/p/${data.snapshot_id}/export?format=md" target="_blank">Export MD</a>`;
-      } catch (err) {
-        alert('Failed to publish snapshot: ' + err.message);
-      }
-    });
-
-    function addLine(className, text) {
-      const line = document.createElement('div');
-      line.className = className;
-      line.textContent = text;
-      log.appendChild(line);
-      log.scrollTop = log.scrollHeight;
-      return line;
+/* ---------- actions ---------- */
+async function setPersona(pid) {
+  const s = curSession(); if (!s || (s.persona_id || null) === pid) return;
+  try {
+    const upd = await post(`/api/sessions/${encodeURIComponent(s.id)}/persona`, { persona_id: pid });
+    Object.assign(s, upd);
+    S.messages.push({ role: 'note', text: `Persona switched to ${personaName(pid)} · history kept` });
+    renderAll(true);
+  } catch (e) { S.messages.push({ role: 'note', text: 'Persona switch failed: ' + e.message }); renderAll(true); }
+}
+async function clearChat() {
+  if (S.running) return;
+  try {
+    await post(`/api/sessions/${encodeURIComponent(S.active)}/clear`);
+    S.messages = [{ role: 'note', text: 'Chat cleared · system prompt and persona kept' }];
+    const s = curSession(); if (s) s.turns_count = 0;
+    S.shareUrl = null; resetShare(); renderAll(true);
+  } catch (e) { S.messages.push({ role: 'note', text: 'Clear failed: ' + e.message }); renderAll(true); }
+}
+async function commitRename() {
+  const v = $('rename').value.trim(); $('rename').classList.add('hidden'); $('title').classList.remove('hidden');
+  const s = curSession(); if (!v || !s || v === s.title) return;
+  try { const upd = await post(`/api/sessions/${encodeURIComponent(s.id)}/rename`, { title: v }); s.title = upd.title; renderChrome(); } catch (e) {}
+}
+function mutate(m, fn) { fn(m); renderAll(); }
+function addEvent(m, type, summary) {
+  m.events.push({ seq: m.events.length + 1, type, summary, t: '+' + ((Date.now() - m.start) / 1000).toFixed(2) + 's' });
+}
+function finishRun(m, status) {
+  clearInterval(S.tick); S.tick = null;
+  if (S.source) { S.source.close(); S.source = null; }
+  m.status = status; m.elapsed = Date.now() - m.start;
+  if (!m.metrics) m.metrics = { tokens: 0, latency: m.elapsed };
+  if (m.approval && m.approval.state === 'pending') m.approval.state = 'cancelled';
+  S.running = null;
+  const s = curSession(); if (s) { s.updated_at = new Date().toISOString(); if (status === 'completed') s.turns_count = (s.turns_count || 0) + 2; }
+  renderAll(true);
+}
+async function send(override) {
+  const text = (typeof override === 'string' ? override : $('input').value).trim();
+  if (!text || S.running) return;
+  const s = curSession();
+  const attach = S.attached;
+  $('input').value = ''; S.attached = null; $('attach-pop').classList.add('hidden'); S.shareUrl = null; resetShare();
+  S.messages.push({ role: 'user', text, attach });
+  const m = { role: 'assistant', status: 'thinking', persona: s.persona_id, text: '', tools: [], sources: [], events: [], metrics: null, approval: null, error: null, prompt: text, start: Date.now(), elapsed: 0, model: S.model, mode: S.mode, runId: '…', chunks: 0 };
+  S.messages.push(m);
+  S.running = 'pending';
+  const firstTurn = (s.title === 'New session' || !s.title);
+  renderAll(true);
+  let runId;
+  try {
+    const body = { message: text, session_id: s.id, persona_id: s.persona_id || null, mode: S.mode, model: S.model };
+    if (attach) body.file_read = attach;
+    const r = await post('/api/runs', body);
+    runId = r.run_id;
+  } catch (e) {
+    m.error = e.message; m.runId = 'n/a'; finishRun(m, 'failed'); return;
+  }
+  m.runId = runId; S.running = runId; m.start = Date.now();
+  S.tick = setInterval(() => { m.elapsed = Date.now() - m.start; renderAll(); }, 200);
+  if (firstTurn) {
+    const title = text.length > 40 ? text.slice(0, 40) + '…' : text;
+    post(`/api/sessions/${encodeURIComponent(s.id)}/rename`, { title }).then(u => { s.title = u.title; renderChrome(); }).catch(() => {});
+  }
+  const src = new EventSource(`/api/runs/${runId}/events`); S.source = src;
+  const pl = e => { try { return JSON.parse(e.data).payload || {}; } catch (x) { return {}; } };
+  src.addEventListener('tool_call', e => mutate(m, () => {
+    const p = pl(e); m.status = 'running';
+    addEvent(m, 'tool_call', `${p.tool} "${p.query || ''}"`);
+    m.tools.push({ arrow: '→', tool: p.tool, detail: `searching notes for "${p.query || ''}"` });
+  }));
+  src.addEventListener('tool_result', e => mutate(m, () => {
+    const p = pl(e);
+    if (p.tool === 'write') {
+      addEvent(m, 'tool_result', `status: ${p.status} · ${p.path}`);
+      if (m.approval) m.approval.state = p.status === 'approved' ? 'approved' : 'rejected';
+      m.status = 'running';
+      m.tools.push({ arrow: '←', tool: 'create_file', detail: p.status === 'approved' ? `created ${p.path}` : 'rejected by you' });
+      return;
     }
+    const srcs = (p.sources || []).map(x => ({ path: x.source_file, lines: `L${x.start_line}–${x.end_line}` }));
+    m.sources = srcs;
+    addEvent(m, 'tool_result', `${srcs.length} sources`);
+    m.tools.push({ arrow: '←', tool: p.tool, detail: srcs.length ? `${srcs.length} sources` : 'no matching notes' });
+  }));
+  src.addEventListener('approval_request', e => mutate(m, () => {
+    const p = pl(e); m.status = 'awaiting';
+    m.approval = { path: p.path, size_bytes: p.size_bytes, state: 'pending' };
+    addEvent(m, 'approval_request', `${p.action} ${p.path} · ${p.size_bytes} B`);
+  }));
+  src.addEventListener('text_delta', e => mutate(m, () => {
+    m.status = 'running'; m.text += pl(e).text || ''; m.chunks++;
+    const last = m.events[m.events.length - 1];
+    if (last && last.type === 'text_delta') last.summary = `${m.chunks} chunks streamed`;
+    else addEvent(m, 'text_delta', `${m.chunks} chunks streamed`);
+  }));
+  src.addEventListener('metrics', e => mutate(m, () => {
+    const p = pl(e); m.metrics = { tokens: p.tokens || 0, latency: p.latency_ms || (Date.now() - m.start) };
+    addEvent(m, 'metrics', `${m.metrics.tokens} tokens · ${Math.round(m.metrics.latency)} ms`);
+  }));
+  src.addEventListener('done', e => {
+    const status = pl(e).status || 'completed';
+    addEvent(m, 'done', `status: ${status}`); finishRun(m, status);
+  });
+  src.addEventListener('error', e => {
+    if (e.data) { const p = pl(e); m.error = p.message || 'Run failed.'; addEvent(m, 'error', m.error); renderAll(); return; }
+    if (S.running !== runId || src.readyState === EventSource.CLOSED) return;
+    m.error = 'Connection to server lost.'; finishRun(m, 'failed');
+  });
+}
+async function decide(ok) {
+  const id = S.running; if (!id || id === 'pending') return;
+  try { await post(`/api/runs/${id}/${ok ? 'approve' : 'reject'}`); } catch (e) { S.messages.push({ role: 'note', text: 'Decision failed: ' + e.message }); renderAll(true); }
+}
+async function cancelRun() {
+  const id = S.running; if (!id || id === 'pending') return;
+  $('cancel').disabled = true;
+  try { await post(`/api/runs/${id}/cancel`); } catch (e) {}
+}
 
-    function finish(text) {
-      status.textContent = text;
-      send.disabled = false;
-      cancel.disabled = true;
-      if (currentSource) {
-        currentSource.close();
-        currentSource = null;
-      }
-      currentRunId = null;
-    }
+/* ---------- share ---------- */
+function resetShare() {
+  $('share-result').classList.add('hidden'); $('publish').classList.remove('hidden'); $('publish').textContent = 'Publish snapshot'; $('publish').disabled = false;
+}
+async function publish() {
+  const msgs = S.messages.filter(m => (m.role === 'user' || m.role === 'assistant') && m.text).map(m => ({ role: m.role, content: m.text }));
+  if (!msgs.length) { $('publish').textContent = 'Nothing to share yet'; return; }
+  $('publish').disabled = true; $('publish').textContent = 'Publishing…';
+  try {
+    const s = curSession();
+    const d = await post('/api/snapshots', { title: (s && s.title) || 'Shared Sensai Session', type: 'conversation', data: { messages: msgs } });
+    const base = location.origin + '/p/' + d.snapshot_id;
+    S.shareUrl = base; $('share-url').textContent = base;
+    const f = $('share-fmts'); f.textContent = '';
+    [['JSON', 'json'], ['Markdown', 'md'], ['HTML', 'html']].forEach(([n, k]) => { const a = el('a', '', n); a.href = `${base}/export?format=${k}`; a.target = '_blank'; f.appendChild(a); });
+    $('publish').classList.add('hidden'); $('share-result').classList.remove('hidden');
+  } catch (e) { $('publish').disabled = false; $('publish').textContent = 'Failed: ' + e.message; }
+}
 
-    cancel.addEventListener('click', async () => {
-      if (!currentRunId) return;
-      cancel.disabled = true;
-      status.textContent = 'Cancelling run ' + currentRunId + '...';
-      try {
-        await fetch('/api/runs/' + currentRunId + '/cancel', { method: 'POST' });
-      } catch (err) {
-        console.error('Cancel request failed:', err);
-      }
-    });
+/* ---------- wiring ---------- */
+function togglePop(id) {
+  ['model-pop', 'share-pop'].forEach(p => $(p).classList.toggle('hidden', p !== id || !$(p).classList.contains('hidden')));
+}
+$('new-chat').onclick = () => newChat().catch(() => {});
+$('title').onclick = () => { const s = curSession(); if (!s) return; $('title').classList.add('hidden'); const r = $('rename'); r.classList.remove('hidden'); r.value = s.title; r.focus(); r.select(); };
+$('rename').onkeydown = e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { $('rename').classList.add('hidden'); $('title').classList.remove('hidden'); } };
+$('rename').onblur = () => { if (!$('rename').classList.contains('hidden')) commitRename(); };
+$('model-btn').onclick = () => togglePop('model-pop');
+$('share-btn').onclick = () => togglePop('share-pop');
+$('model-input').onchange = e => { S.model = e.target.value.trim() || S.model; store.set('sensai_model', S.model); renderChrome(); };
+$('internals-btn').onclick = () => { S.internals = !S.internals; renderChrome(); };
+$('insp-hide').onclick = () => { S.internals = false; renderChrome(); };
+$('clear-btn').onclick = clearChat;
+$('publish').onclick = publish;
+$('copy-url').onclick = () => { try { navigator.clipboard.writeText(S.shareUrl); } catch (e) {} $('copy-url').textContent = 'Copied'; setTimeout(() => $('copy-url').textContent = 'Copy', 1500); };
+$('attach-btn').onclick = () => { $('attach-pop').classList.toggle('hidden'); $('attach-input').focus(); };
+$('attach-input').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); const v = e.target.value.trim(); if (v) { S.attached = v; e.target.value = ''; $('attach-pop').classList.add('hidden'); renderChrome(); } } };
+$('unattach').onclick = () => { S.attached = null; renderChrome(); };
+$('input').oninput = renderChrome;
+$('input').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+$('send').onclick = () => send();
+$('cancel').onclick = cancelRun;
+const openSettings = () => { $('settings').classList.remove('hidden'); $('scrim').classList.remove('hidden'); };
+const closeSettings = () => { $('settings').classList.add('hidden'); $('scrim').classList.add('hidden'); };
+$('open-settings').onclick = openSettings; $('open-profile').onclick = openSettings;
+$('close-settings').onclick = closeSettings; $('scrim').onclick = closeSettings;
+$('prof-save').onclick = async () => {
+  try {
+    S.profile = await post('/api/profile', { user_id: 'default', language: $('prof-lang').value.trim() || null, explanation_level: $('prof-level').value });
+    $('prof-msg').textContent = 'Saved.'; profileLabel(); if (!S.messages.length) renderThread();
+  } catch (e) { $('prof-msg').textContent = 'Failed: ' + e.message; }
+};
+document.addEventListener('click', e => { if (!e.target.closest('.rel')) ['model-pop', 'share-pop', 'attach-pop'].forEach(p => $(p).classList.add('hidden')); });
+$('model-input').value = S.model;
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const message = input.value.trim();
-      if (!message) return;
-      const personaId = personaSelect.value || null;
-      input.value = '';
-      send.disabled = true;
-      cancel.disabled = false;
+function profileLabel() {
+  const p = S.profile || {};
+  const lvl = p.explanation_level ? p.explanation_level[0].toUpperCase() + p.explanation_level.slice(1) : 'Beginner';
+  $('profile-label').textContent = `${p.language || 'English'} · ${lvl}`;
+  $('prof-lang').value = p.language || ''; if (p.explanation_level) $('prof-level').value = p.explanation_level;
+}
 
-      addLine('user', 'You: ' + message);
-      currentMessages.push({role: 'user', content: message});
-      const reply = addLine('assistant', '');
-
-      let runId;
-      try {
-        const response = await fetch('/api/runs', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            message,
-            session_id: sessionId,
-            persona_id: personaId,
-            mode: modeSelect.value,
-            model: modelInput.value,
-          }),
-        });
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        const resData = await response.json();
-        runId = resData.run_id;
-      } catch (error) {
-        addLine('error', 'Error: ' + error.message);
-        return finish('Failed.');
-      }
-
-      currentRunId = runId;
-      status.textContent = 'Run ' + runId + ': running';
-      currentSource = new EventSource('/api/runs/' + runId + '/events');
-
-      currentSource.addEventListener('text_delta', (e) => {
-        reply.textContent += JSON.parse(e.data).payload.text;
-        log.scrollTop = log.scrollHeight;
-      });
-
-      currentSource.addEventListener('metrics', (e) => {
-        const m = JSON.parse(e.data).payload;
-        sessionTotalTokens += (m.tokens || 0);
-        budgetStats.textContent = `Tokens: ${m.tokens || 0} | Session: ${sessionTotalTokens}`;
-      });
-
-      currentSource.addEventListener('done', (e) => {
-        const finalStatus = JSON.parse(e.data).payload.status;
-        finish('Run ' + runId + ': ' + finalStatus);
-        if (finalStatus === 'completed' && reply.textContent) {
-          currentMessages.push({role: 'assistant', content: reply.textContent});
-        }
-      });
-
-      currentSource.onerror = (e) => {
-        if (e.data) {
-          addLine('error', 'Error: ' + JSON.parse(e.data).payload.message);
-          return;
-        }
-        if (currentSource && currentSource.readyState === EventSource.CLOSED) return;
-        addLine('error', 'Error: connection to server lost.');
-        finish('Run ' + runId + ': failed');
-      };
-    });
-  </script>
+(async function init() {
+  applyTheme(S.theme);
+  renderChrome(); renderThread();
+  const [personas, profile, sources, prompt] = await Promise.all([
+    api('/api/personas').catch(() => []), api('/api/profile').catch(() => null),
+    api('/api/retrieval/sources').catch(() => null), api('/api/prompts/active').catch(() => null)
+  ]);
+  S.personas = personas; S.profile = profile;
+  profileLabel();
+  $('knowledge-label').textContent = sources ? `${sources.length} source${sources.length === 1 ? '' : 's'}` : '—';
+  S.promptVer = prompt ? prompt.version_id : null;
+  $('prompt-label').textContent = prompt ? `${prompt.version_id} active` : '—';
+  try { await loadSessions(); await ensureSession(); } catch (e) { S.messages = [{ role: 'note', text: 'Could not load sessions: ' + e.message }]; renderAll(true); }
+})();
+</script>
 </body>
 </html>
