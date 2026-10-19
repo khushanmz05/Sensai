@@ -2,9 +2,10 @@ import html
 import json
 import secrets
 import sqlite3
+import textwrap
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class ExportError(Exception):
@@ -25,6 +26,129 @@ def sanitize_snapshot_data(data: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 sanitized[k] = v
     return sanitized
+
+
+def _sanitize_pdf_text(text: str) -> str:
+    replacements = {
+        '\u2014': '--',
+        '\u2013': '-',
+        '\u201c': '"',
+        '\u201d': '"',
+        '\u2018': "'",
+        '\u2019': "'",
+        '\u2026': '...',
+        '\u2022': '*',
+        '\xa0': ' ',
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
+
+
+def _escape_pdf_literal(text: str) -> str:
+    cleaned = _sanitize_pdf_text(text)
+    return cleaned.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+
+
+def build_pdf_bytes(title: str, blocks: List[Tuple[str, str]]) -> bytes:
+    pages_streams: List[bytes] = []
+    current_stream: List[str] = []
+    y = 780.0
+
+    def start_page():
+        nonlocal y
+        current_stream.clear()
+        current_stream.append('BT')
+        y = 780.0
+
+    def end_page():
+        current_stream.append('ET')
+        content_str = '\n'.join(current_stream)
+        pages_streams.append(content_str.encode('latin-1', errors='replace'))
+
+    start_page()
+
+    def add_line(font_tag: str, size: int, text: str, dy: float):
+        nonlocal y
+        if y < 65.0:
+            end_page()
+            start_page()
+        escaped = _escape_pdf_literal(text)
+        current_stream.append(f'{font_tag} {size} Tf')
+        current_stream.append(f'50 {y:.1f} Td')
+        current_stream.append(f'({escaped}) Tj')
+        current_stream.append(f'-50 -{y:.1f} Td')
+        y -= dy
+
+    # Render Title
+    for title_line in textwrap.wrap(title, width=50, break_long_words=True) or [title]:
+        add_line('/F1', 18, title_line, 24.0)
+    y -= 10.0
+
+    for heading, body in blocks:
+        if y < 85.0:
+            end_page()
+            start_page()
+
+        if heading:
+            for h_line in textwrap.wrap(heading, width=65, break_long_words=True) or [heading]:
+                add_line('/F1', 12, h_line, 16.0)
+
+        paragraphs = (body or '').split('\n')
+        for p in paragraphs:
+            p = p.strip()
+            if not p:
+                y -= 8.0
+                continue
+            wrapped_lines = textwrap.wrap(p, width=75, break_long_words=True, replace_whitespace=False)
+            for line in (wrapped_lines or [p]):
+                add_line('/F2', 10, line, 14.0)
+        y -= 10.0
+
+    end_page()
+
+    total_pages = len(pages_streams)
+    page_obj_ids = [5 + 2 * i for i in range(total_pages)]
+
+    objects: Dict[int, bytes] = {}
+    objects[1] = b'<< /Type /Catalog /Pages 2 0 R >>'
+    kids_str = ' '.join(f'{pid} 0 R' for pid in page_obj_ids)
+    objects[2] = f'<< /Type /Pages /Kids [{kids_str}] /Count {total_pages} >>'.encode('ascii')
+    objects[3] = b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'
+    objects[4] = b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+
+    for i in range(total_pages):
+        pid = 5 + 2 * i
+        cid = 6 + 2 * i
+        stream_bytes = pages_streams[i]
+        objects[pid] = (
+            f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] '
+            f'/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> '
+            f'/Contents {cid} 0 R >>'
+        ).encode('ascii')
+        objects[cid] = (
+            f'<< /Length {len(stream_bytes)} >>\nstream\n'.encode('ascii')
+            + stream_bytes +
+            b'\nendstream'
+        )
+
+    max_id = 4 + 2 * total_pages
+    out = bytearray(b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
+    offsets: Dict[int, int] = {}
+    for obj_id in range(1, max_id + 1):
+        offsets[obj_id] = len(out)
+        out.extend(f'{obj_id} 0 obj\n'.encode('ascii'))
+        out.extend(objects[obj_id])
+        out.extend(b'\nendobj\n')
+
+    startxref = len(out)
+    out.extend(f'xref\n0 {max_id + 1}\n0000000000 65535 f \n'.encode('ascii'))
+    for obj_id in range(1, max_id + 1):
+        out.extend(f'{offsets[obj_id]:010d} 00000 n \n'.encode('ascii'))
+    out.extend(
+        f'trailer\n<< /Size {max_id + 1} /Root 1 0 R >>\nstartxref\n{startxref}\n%%EOF\n'.encode('ascii')
+    )
+    return bytes(out)
 
 
 class SnapshotStore:
@@ -166,6 +290,24 @@ class SnapshotStore:
 </body>
 </html>
 '''
+
+    def export_as_pdf(self, snapshot_id: str) -> bytes:
+        snap = self.get_snapshot(snapshot_id)
+        if not snap:
+            raise ExportError(f'Snapshot {snapshot_id!r} not found.')
+
+        data = snap['data']
+        blocks: List[Tuple[str, str]] = []
+        if snap['type'] == 'conversation':
+            for msg in data.get('messages', []):
+                role = msg.get('role', 'user').capitalize()
+                content = msg.get('content', '')
+                blocks.append((role, content))
+        elif snap['type'] == 'artifact':
+            for sec_id, content in data.get('sections', {}).items():
+                blocks.append((sec_id, content))
+
+        return build_pdf_bytes(snap['title'], blocks)
 
     def close(self):
         with self._lock:

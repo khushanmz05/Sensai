@@ -218,6 +218,15 @@ class ArtifactStore:
             lines.append('')
         return '\n'.join(lines).strip() + '\n'
 
+    def export_as_pdf(self, artifact_id: str) -> bytes:
+        art = self.get_artifact(artifact_id)
+        if not art:
+            raise ArtifactError(f'Artifact {artifact_id!r} not found.')
+
+        from export.service import build_pdf_bytes
+        blocks = [(sec_id, content) for sec_id, content in art['sections'].items()]
+        return build_pdf_bytes(art['title'], blocks)
+
     def close(self):
         with self._lock:
             self.conn.close()

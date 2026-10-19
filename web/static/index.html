@@ -935,7 +935,7 @@
         x.setAttribute('aria-label', 'Dismiss share link');
         x.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
         x.addEventListener('click', () => shareBox.classList.remove('show'));
-        shareBox.replaceChildren(el('span', null, 'Public link — anyone with it can read this chat:'), link(path, url), link(path + '/export?format=md', 'Export .md'), copy, x);
+        shareBox.replaceChildren(el('span', null, 'Public link — anyone with it can read this chat:'), link(path, url), link(path + '/export?format=md', 'Export .md'), link(path + '/export?format=pdf', 'Export .pdf'), copy, x);
         shareBox.classList.remove('show');
         void shareBox.offsetWidth;
         shareBox.classList.add('show');

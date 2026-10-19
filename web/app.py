@@ -864,8 +864,15 @@ def get_artifact_history(artifact_id: str):
 
 
 @app.get('/api/artifacts/{artifact_id}/export')
-def export_artifact(artifact_id: str):
+def export_artifact(artifact_id: str, format: str = Query('md')):
     try:
+        if format == 'pdf':
+            pdf_bytes = app.state.artifacts.export_as_pdf(artifact_id)
+            return Response(
+                content=pdf_bytes,
+                media_type='application/pdf',
+                headers={'Content-Disposition': f'attachment; filename="{artifact_id}.pdf"'},
+            )
         content = app.state.artifacts.render_markdown(artifact_id)
         return PlainTextResponse(content, media_type='text/markdown')
     except ArtifactError as err:
@@ -905,6 +912,13 @@ def export_public_snapshot(snapshot_id: str, format: str = Query('json')):
             )
         elif format == 'html':
             return HTMLResponse(app.state.snapshots.export_as_html(snapshot_id))
+        elif format == 'pdf':
+            pdf_bytes = app.state.snapshots.export_as_pdf(snapshot_id)
+            return Response(
+                content=pdf_bytes,
+                media_type='application/pdf',
+                headers={'Content-Disposition': f'attachment; filename="{snapshot_id}.pdf"'},
+            )
         else:
             return Response(
                 app.state.snapshots.export_as_json(snapshot_id),
