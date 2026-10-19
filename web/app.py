@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import secrets
 import threading
 import time
@@ -863,6 +864,11 @@ def get_artifact_history(artifact_id: str):
     return app.state.artifacts.get_history(artifact_id)
 
 
+def _pdf_disposition(name: str) -> str:
+    safe = re.sub(r'[^A-Za-z0-9_-]', '_', name) or 'export'
+    return f'attachment; filename="{safe}.pdf"'
+
+
 @app.get('/api/artifacts/{artifact_id}/export')
 def export_artifact(artifact_id: str, format: str = Query('md')):
     try:
@@ -871,7 +877,7 @@ def export_artifact(artifact_id: str, format: str = Query('md')):
             return Response(
                 content=pdf_bytes,
                 media_type='application/pdf',
-                headers={'Content-Disposition': f'attachment; filename="{artifact_id}.pdf"'},
+                headers={'Content-Disposition': _pdf_disposition(artifact_id)},
             )
         content = app.state.artifacts.render_markdown(artifact_id)
         return PlainTextResponse(content, media_type='text/markdown')
@@ -917,7 +923,7 @@ def export_public_snapshot(snapshot_id: str, format: str = Query('json')):
             return Response(
                 content=pdf_bytes,
                 media_type='application/pdf',
-                headers={'Content-Disposition': f'attachment; filename="{snapshot_id}.pdf"'},
+                headers={'Content-Disposition': _pdf_disposition(snapshot_id)},
             )
         else:
             return Response(
