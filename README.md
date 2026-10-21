@@ -1,8 +1,8 @@
 # Sensai
 
 Python 3.10+ CLI chatbot using the Ollama HTTP API directly. No LLM framework or Ollama SDK.
-This working copy includes the CLI chat, personas (A5), and a first CLI-integrated
-structured-output increment (T5). RAG chunking and the web UI are early prototypes.
+This working copy includes the CLI chat, personas (A5), and structured workflows
+(T5) with persistent task lists, plans and custom records in the CLI and browser.
 T4 provides opt-in file context and creation of new files for Linux/WSL.
 The first A3 increment previews each save and requires explicit confirmation.
 It does not implement the full Sensai feature catalogue.
@@ -87,8 +87,12 @@ This increment accepts draft 2020-12 inline schemas with a top-level object and 
 `$ref`/`$dynamicRef` references. `format` annotations (such as email) are not asserted.
 Validation verifies structure, not factual accuracy or permission to execute an action.
 Both CLI examples passed on the user's local model (see docs/VERIFY.md).
-The web prototype is not connected to T5 yet; broader manual checks remain pending.
-See the examples above and `docs/VERIFY.md` for manual checks and recorded results.
+Open `/structured` in the web service to extract tasks, create plans or define
+custom fields, then complete checklist items and download validated JSON.
+CLI equivalents start with `/extract tasks <text>` and `/extract plan <goal>`.
+Results persist across restarts. Structured generation requires a real Ollama model
+and does not fall back to stub output. See [the workflow and verification guide](docs/STRUCTURED_WORKSPACE.md).
+The new workflow's live acceptance walkthrough remains to be run in WSL.
 
 ## Files and architecture
 
