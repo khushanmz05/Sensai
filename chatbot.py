@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import sys
+import sqlite3
 from pathlib import Path
 from datetime import datetime
 
@@ -15,6 +16,8 @@ from persona.registry import PersonaError, load_personas, persona_prompt
 from retrieval.rag import retrieve, format_context
 from session import DatabaseError, build_system_message, SessionStore
 from structured.output import JsonOutput, StructuredOutputError
+from structured.results import ResultError, ResultStore
+from structured.workflow import generate_result, render_result
 from guardrails import GuardrailError, Guardrails
 from web_search import SearchError, SearxSearch
 from web_search.context import SEARCH_RULE, display_sources, filter_page, format_evidence
@@ -109,7 +112,7 @@ def print_profile_context(session_store, session, user_id="default"):
 def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
              json_output=None, json_attempts=2, file_reader=None, store=None,
              session_store=None, retrieval_model='nomic-embed-text', top_k=3,
-             guardrails=None, searcher=None):
+             guardrails=None, searcher=None, structured_store=None):
     personas = personas or {}
     if searcher is not None:
         system_prompt += '\n\n' + SEARCH_RULE
@@ -159,6 +162,7 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
         print('JSON mode: responses are displayed only after schema validation.')
     if searcher is not None:
         print('Web search enabled: /search <query> searches and answers with sources.')
+    print('Structured results: /extract tasks|plan <text>, /results, /result <id>, /complete <id> <item>.')
     if file_reader is not None:
         if isinstance(file_reader, WorkspaceWriter):
             print(f'Workspace: {file_reader.root} | /read <path> | /save <new-path> (confirmation required)')
@@ -172,6 +176,57 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
             return 0
         if user_text == '/exit':
             return 0
+        command = user_text.split(maxsplit=1)[0] if user_text else ''
+        if command in ('/extract', '/results', '/result', '/complete', '/uncomplete'):
+            try:
+                if structured_store is None:
+                    structured_store = ResultStore()
+                if command == '/extract':
+                    parts = user_text.split(maxsplit=2)
+                    if len(parts) != 3:
+                        print('Usage: /extract tasks|plan|custom <source text>')
+                        continue
+                    kind, text = parts[1:]
+                    schema = json_output.schema if kind == 'custom' and json_output else None
+                    last_answer = None
+                    print('Generating structured result; waiting for schema validation...')
+                    result = generate_result(text, kind, model, host, timeout, structured_store,
+                                             schema=schema, attempts=json_attempts,
+                                             guardrails=guardrails, stream_func=stream_reply)
+                    print(render_result(result))
+                    last_answer = structured_store.export(result['id'])
+                elif command == '/results':
+                    rows = structured_store.list()
+                    for row in rows:
+                        print(f"{row['id']}  {row['kind']}  {row['created_at']}")
+                    if not rows:
+                        print('No saved structured results.')
+                elif command == '/result':
+                    parts = user_text.split()
+                    if len(parts) not in (2, 3) or (len(parts) == 3 and parts[2] != 'json'):
+                        print('Usage: /result <id> [json]')
+                        continue
+                    result = structured_store.get(parts[1])
+                    last_answer = structured_store.export(parts[1])
+                    print(last_answer if len(parts) == 3 else render_result(result))
+                else:
+                    parts = user_text.split()
+                    if len(parts) != 3:
+                        print('Usage: /complete <id> <1-based item>; /uncomplete reverses it.')
+                        continue
+                    try:
+                        index = int(parts[2]) - 1
+                    except ValueError:
+                        raise ResultError('Item number must be an integer.')
+                    result = structured_store.set_completed(parts[1], index, command == '/complete')
+                    print(render_result(result))
+            except KeyboardInterrupt:
+                print('\nStructured generation cancelled; no result was saved.')
+            except (StructuredOutputError, ResultError, ChatError, GuardrailError) as error:
+                print(f'Structured result: {error}', file=sys.stderr)
+            except (sqlite3.Error, OSError):
+                print('Structured result storage is unavailable.', file=sys.stderr)
+            continue
         if user_text == '/clear':
             if session_store is not None:
                 session = session_store.create_session('New session')
