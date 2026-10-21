@@ -1,8 +1,9 @@
-# EV2: configurable CLI content and privacy checks
+# EV2: configurable content and privacy checks
 
-Owner: member B (Mark Charadnik). This increment implements a deterministic
-policy for ordinary CLI chat turns, with a reusable shared-generation boundary.
-It is not full project-wide EV2 acceptance.
+Owner: member B (Mark Charadnik). A deterministic policy intercepts inputs and
+outputs in CLI chat, web chat, and structured generation. Input checks run before
+model calls; output checks run before display and persistence. The same policy
+also protects new web artifact content, publication and model-bound RAG context.
 
 ## Run
 
@@ -88,16 +89,25 @@ Integration tests and full regression execution are pending in WSL: the availabl
 Windows interpreter lacked requests/jsonschema, and dependency downloads were denied.
 Real-model checks are pending. Do not report those checks as passed.
 
-## Remaining EV2 scope
+## Web coverage and limits
 
-- The web app does not yet pass a policy to the shared generator. Web chat,
-  artifacts, direct endpoints, event logs and public snapshots remain outside
-  this increment; configuring CLI guardrails does not protect the web service.
+- Enable the web policy with `SENSAI_GUARDRAILS=guardrails/demo.json` before starting
+  the server. Configuring CLI guardrails alone does not enable the web policy.
+  It covers web chat and T5, attachments/history/profile in outgoing model context,
+  RAG ingestion and retrieved content, new artifact bodies, and new snapshots.
+  SSE events are filtered before both browser transmission and event recording.
+  Schema descriptions and enums are checked too; schemas requiring redaction are
+  rejected, never silently changed. See [the walkthrough](EV2_WEB_VERIFY.md).
 - CLI management commands (`/profile`, session names, file paths, etc.) are not
   filtered. Existing database records and original files are not rewritten.
-- Document ingestion/index storage is not sanitized; outbound chat context is.
+- CLI and web ingestion filter text before embedding and index storage. Existing indexes
+  and original source files are not rewritten; retrieved context is checked again.
 - There is no guarantee against paraphrases, obfuscation, prompt injection,
   multilingual bypasses, or unknown PII. Permissions and action approvals remain
   independent controls and must not be replaced by these checks.
-- Model tools, cache and publication need explicit integration before claiming
-  the broader acceptance criteria in SCOPING.md.
+- Existing private database files are not retroactively anonymized. Web history
+  reads filter message content; legacy artifact/public/structured exports that
+  need redaction are refused. Create a filtered copy to export them.
+- These are configurable phrase and PII rules, not a semantic classifier. New
+  model/tool/cache routes must use the shared boundaries when added. File
+  permissions, human approvals and authentication remain separate features.

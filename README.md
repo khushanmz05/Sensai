@@ -160,17 +160,23 @@ Existing files, including symbolic links, cannot be overwritten. Only `.txt`, `.
 This is a synchronous CLI approval for creating a new file, not general agent approval,
 editing, scheduling or publication. The model cannot approve its own output.
 
-## Configurable CLI guardrails (EV2, member B)
+## Content and privacy guardrails (EV2, member B)
 
 ```bash
 python3 chatbot.py --model llama3.2:1b --guardrails guardrails/demo.json
+
+# Web chat and structured workflows use the same server-owned policy:
+SENSAI_GUARDRAILS=guardrails/demo.json python3 -m uvicorn web.app:app --host 127.0.0.1 --port 8000
 ```
 
 Opt-in input/output phrase rules and email/international-phone redaction.
 Enabled mode buffers responses before display and validates JSON again after
-filtering. Normal CLI turns are sanitized before persistence and `/save`.
-See [configuration, demos, tests and remaining scope](docs/GUARDRAILS.md).
-Web endpoints, existing stored data and management commands are not covered yet.
+filtering. CLI and web chat filter requests before the model and responses before
+display, history, and event logs. New snapshots and artifact content are filtered;
+legacy exports that would expose personal data are refused without rewriting old records.
+The web interface shows whether the configured checks are active.
+See [configuration and limits](docs/GUARDRAILS.md) and the
+[web verification walkthrough](docs/EV2_WEB_VERIFY.md).
 
 ## Live web search (T3, member B)
 
