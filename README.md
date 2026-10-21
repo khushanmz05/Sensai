@@ -168,6 +168,19 @@ filtering. Normal CLI turns are sanitized before persistence and `/save`.
 See [configuration, demos, tests and remaining scope](docs/GUARDRAILS.md).
 Web endpoints, existing stored data and management commands are not covered yet.
 
+## Live web search (T3, member B)
+
+```bash
+python3 chatbot.py --model llama3.2:1b --search-url http://127.0.0.1:8088
+```
+
+Enter `/search Python asyncio documentation` to search and answer with sources.
+Requires a running SearXNG instance with JSON enabled. See
+[local provider setup, demos and verification](docs/WEB_SEARCH.md).
+Search snippets and URLs enter the conversation as untrusted evidence; the CLI
+reports failed or empty searches without asking the model to invent results.
+Works with `--guardrails`, file context, local RAG and structured JSON output.
+
 ## Tests
 
 ```bash
