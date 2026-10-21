@@ -156,6 +156,18 @@ Existing files, including symbolic links, cannot be overwritten. Only `.txt`, `.
 This is a synchronous CLI approval for creating a new file, not general agent approval,
 editing, scheduling or publication. The model cannot approve its own output.
 
+## Configurable CLI guardrails (EV2, member B)
+
+```bash
+python3 chatbot.py --model llama3.2:1b --guardrails guardrails/demo.json
+```
+
+Opt-in input/output phrase rules and email/international-phone redaction.
+Enabled mode buffers responses before display and validates JSON again after
+filtering. Normal CLI turns are sanitized before persistence and `/save`.
+See [configuration, demos, tests and remaining scope](docs/GUARDRAILS.md).
+Web endpoints, existing stored data and management commands are not covered yet.
+
 ## Tests
 
 ```bash
