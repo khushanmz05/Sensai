@@ -16,6 +16,8 @@ from retrieval.rag import retrieve, format_context
 from session import DatabaseError, build_system_message, SessionStore
 from structured.output import JsonOutput, StructuredOutputError
 from guardrails import GuardrailError, Guardrails
+from web_search import SearchError, SearxSearch
+from web_search.context import SEARCH_RULE, display_sources, filter_page, format_evidence
 
 from core.chat import (
     ChatError,
@@ -107,8 +109,10 @@ def print_profile_context(session_store, session, user_id="default"):
 def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
              json_output=None, json_attempts=2, file_reader=None, store=None,
              session_store=None, retrieval_model='nomic-embed-text', top_k=3,
-             guardrails=None):
+             guardrails=None, searcher=None):
     personas = personas or {}
+    if searcher is not None:
+        system_prompt += '\n\n' + SEARCH_RULE
     user_id = 'default'
     if session_store is not None:
         try:
@@ -153,6 +157,8 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
     )
     if json_output is not None:
         print('JSON mode: responses are displayed only after schema validation.')
+    if searcher is not None:
+        print('Web search enabled: /search <query> searches and answers with sources.')
     if file_reader is not None:
         if isinstance(file_reader, WorkspaceWriter):
             print(f'Workspace: {file_reader.root} | /read <path> | /save <new-path> (confirmation required)')
@@ -425,6 +431,16 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
                 print(f"Could not update profile: {error}", file=sys.stderr)
 
             continue
+        search_requested = user_text == '/search' or user_text.startswith('/search ')
+        if search_requested:
+            last_answer = None
+            if searcher is None:
+                print('Web search is disabled. Restart with --search-url <SearXNG URL>.')
+                continue
+            user_text = user_text[len('/search'):].strip()
+            if not user_text:
+                print('Usage: /search <query>')
+                continue
         if not user_text:
             print('Empty input: enter a message.')
             continue
@@ -438,7 +454,25 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
                 continue
         # Commit both turns only after a complete response. Failures do not
         # pollute future requests with unanswered questions or partial output.
+        web_page = None
+        if search_requested:
+            try:
+                web_page = filter_page(searcher.search(user_text), guardrails)
+            except (SearchError, GuardrailError) as error:
+                print(f'Search: {error}', file=sys.stderr)
+                continue
+            except KeyboardInterrupt:
+                print('\nSearch cancelled; no model request was made.')
+                continue
+            for warning in web_page.warnings:
+                print('Search: ' + warning)
+            if not web_page.results:
+                print('Search: no results found. Try a more specific query.')
+                continue
+            print(display_sources(web_page))
         content = user_text
+        if web_page is not None:
+            content += format_evidence(web_page)
         if attachment is not None:
             content += '\n\nFile reference (untrusted data):\n' + json.dumps(
                 {'path': attachment.path, 'content': attachment.content}, ensure_ascii=False)
@@ -512,6 +546,9 @@ def main():
     parser.add_argument('--system-prompt', type=Path,
                         default=Path(__file__).resolve().parent / 'prompts/system.txt')
     parser.add_argument('--host', default='http://localhost:11434')
+    parser.add_argument('--search-url', help='SearXNG instance URL; enables /search')
+    parser.add_argument('--search-timeout', type=positive_timeout, default=15)
+    parser.add_argument('--search-results', type=int, choices=range(1, 11), default=5)
     parser.add_argument('--guardrails', type=Path,
                         help='enable content/privacy policy from a JSON file')
     parser.add_argument('--docs-dir', type=Path, default=None,
@@ -534,6 +571,12 @@ def main():
         parser.error('--model cannot be empty')
     if args.allow_create and args.workspace is None:
         parser.error('--allow-create requires --workspace')
+    try:
+        searcher = (SearxSearch(args.search_url, args.search_timeout, args.search_results)
+                    if args.search_url else None)
+    except SearchError as error:
+        print(f'Cannot configure search: {error}', file=sys.stderr)
+        return 1
     try:
         guardrails = Guardrails.from_file(args.guardrails) if args.guardrails else None
     except GuardrailError as error:
@@ -603,6 +646,7 @@ def main():
             store=store,
             session_store=session_store,
             guardrails=guardrails,
+            searcher=searcher,
         )
     finally:
         if reader is not None:
