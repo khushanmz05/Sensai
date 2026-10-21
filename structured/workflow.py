@@ -35,6 +35,9 @@ def generate_result(text, kind, model, host, timeout, store, schema=None,
     if not isinstance(model, str) or not model.strip():
         raise StructuredOutputError('Select an installed Ollama model.')
     output = select_output(kind, schema)
+    if guardrails is not None:
+        if guardrails.check_input(model) != model:
+            raise StructuredOutputError('Model name must not contain personal data.')
     messages = [{'role': 'system', 'content': INSTRUCTIONS[kind]},
                 {'role': 'user', 'content': text.strip()}]
     raw = ''.join(execute_turn_stream(host, model, messages, timeout,

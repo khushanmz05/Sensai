@@ -1,5 +1,4 @@
 """Real-model structured workflows and persisted JSON/checklist consumers."""
-import os
 from pathlib import Path
 import sqlite3
 from typing import Any, Dict, Literal, Optional
@@ -9,7 +8,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, StrictBool, StrictInt
 
 from core.chat import ChatError
-from guardrails import GuardrailError, Guardrails
+from guardrails import GuardrailError
+from guardrails.web import install_policy, output_value, require_safe_export
 from structured.output import StructuredOutputError
 from structured.results import ResultError, ResultStore
 from structured.workflow import generate_result, select_output
@@ -33,8 +33,7 @@ class CompletionRequest(BaseModel):
 
 def install_routes(app, settings):
     app.state.structured_store = ResultStore()
-    policy_path = os.getenv('SENSAI_GUARDRAILS')
-    app.state.structured_policy = Guardrails.from_file(policy_path) if policy_path else None
+    install_policy(app)
 
     @app.get('/structured')
     def structured_page():
@@ -52,9 +51,10 @@ def install_routes(app, settings):
                                    request.model or settings.default_model,
                                    settings.clean_ollama_host, 120,
                                    app.state.structured_store, schema=request.schema_,
-                                   attempts=request.attempts, guardrails=app.state.structured_policy)
+                                   attempts=request.attempts, guardrails=app.state.guardrails)
         except (StructuredOutputError, GuardrailError) as error:
-            raise HTTPException(status_code=422, detail=str(error))
+            detail = str(error) if isinstance(error, GuardrailError) or not app.state.guardrails else 'Structured response or schema rejected.'
+            raise HTTPException(status_code=422, detail=detail)
         except ChatError as error:
             raise HTTPException(status_code=502, detail=str(error))
         except (sqlite3.Error, OSError):
@@ -62,18 +62,21 @@ def install_routes(app, settings):
 
     @app.get('/api/structured/results')
     def list_results():
-        return app.state.structured_store.list()
+        return output_value(app, app.state.structured_store.list())
 
     @app.get('/api/structured/results/{result_id}')
     def get_result(result_id: str):
         try:
-            return app.state.structured_store.get(result_id)
+            result = app.state.structured_store.get(result_id)
+            require_safe_export(app, result)
+            return result
         except ResultError as error:
             raise HTTPException(status_code=404, detail=str(error))
 
     @app.patch('/api/structured/results/{result_id}/completion')
     def completion(result_id: str, request: CompletionRequest):
         try:
+            require_safe_export(app, app.state.structured_store.get(result_id))
             return app.state.structured_store.set_completed(result_id, request.index, request.completed)
         except ResultError as error:
             raise HTTPException(status_code=422, detail=str(error))
@@ -81,6 +84,7 @@ def install_routes(app, settings):
     @app.get('/api/structured/results/{result_id}/export')
     def export_result(result_id: str):
         try:
+            require_safe_export(app, app.state.structured_store.get(result_id))
             raw = app.state.structured_store.export(result_id)
         except ResultError as error:
             raise HTTPException(status_code=404, detail=str(error))
