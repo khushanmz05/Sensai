@@ -215,6 +215,14 @@ def execute_turn_stream(
     guardrails=None,
 ) -> Generator[str, None, None]:
     s_func = stream_func or stream_reply
+    stream_options = {}
+    if stats_collector is not None:
+        stream_options['stats_collector'] = stats_collector
+    if stop_event is not None:
+        stream_options['stop_event'] = stop_event
+        if stop_event.is_set():
+            error_type = GuardrailError if guardrails is not None else ChatError
+            raise error_type('Generation cancelled.')
     if guardrails is not None:
         to_send = guardrails.messages(to_send)
         original_stream = s_func
@@ -252,10 +260,12 @@ def execute_turn_stream(
         result = json_output.generate(
             to_send,
             lambda msgs, schema: s_func(
-                host, model, msgs, timeout, schema=schema
+                host, model, msgs, timeout, schema=schema, **stream_options
             ),
             max_attempts=json_attempts,
         )
+        if stop_event is not None and stop_event.is_set():
+            raise ChatError('Generation cancelled.')
         if guardrails is not None:
             result = guardrails.json_output(result)
             if not json_output.validator.is_valid(result):
@@ -264,7 +274,7 @@ def execute_turn_stream(
         yield text
     else:
         for chunk in s_func(
-            host, model, to_send, timeout
+            host, model, to_send, timeout, **stream_options
         ):
             yield chunk
 
