@@ -71,13 +71,32 @@ class Guardrails:
         return self.redact(text)
 
     def json_output(self, value):
+        return self._map_strings(value, self.output)
+
+    def json_input(self, value):
+        """Check nested content before model, storage or publication boundaries."""
+        return self._map_strings(value, self.check_input)
+
+    def check_schema(self, schema):
+        # Schema descriptions/enums also enter the model prompt. Never silently
+        # change a schema contract to achieve redaction.
+        if self.json_input(schema) != schema:
+            raise GuardrailError('Schema contains personal data; use a non-personal schema.')
+
+    def event_payload(self, event_type, payload):
+        # Control events must still be deliverable when generation is refused.
+        if event_type in ('error', 'done', 'metrics'):
+            return self._map_strings(payload, self.redact)
+        return self.json_output(payload)
+
+    def _map_strings(self, value, transform):
         if isinstance(value, str):
-            return self.output(value)
+            return transform(value)
         if isinstance(value, list):
-            return [self.json_output(item) for item in value]
+            return [self._map_strings(item, transform) for item in value]
         if isinstance(value, dict):
             # Renaming keys could break schemas or silently merge distinct keys.
-            if any(self.output(key) != key for key in value):
-                raise GuardrailError('Response contains personal data in JSON keys.')
-            return {key: self.json_output(item) for key, item in value.items()}
+            if any(transform(key) != key for key in value):
+                raise GuardrailError('Content contains personal data in JSON keys.')
+            return {key: self._map_strings(item, transform) for key, item in value.items()}
         return value

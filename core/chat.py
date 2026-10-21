@@ -142,6 +142,7 @@ def assemble_turn(
     top_k: int = 3,
     retrieval_model: str = "nomic-embed-text",
     file_enabled: bool = False,
+    guardrails=None,
 ) -> Tuple[List[Dict[str, str]], str, List[Dict[str, Any]], str]:
     """Return (to_send, user_content, retrieved_results, formatted_context)."""
     sys_msg = make_system_message(
@@ -166,6 +167,10 @@ def assemble_turn(
         )
 
     pending = clean_history + [{'role': 'user', 'content': content}]
+    if guardrails is not None:
+        user_text = guardrails.check_input(user_text)
+        pending = guardrails.messages(pending)
+        content = pending[-1]['content']
     to_send = pending
 
     retrieved_results: List[Dict[str, Any]] = []
@@ -174,14 +179,19 @@ def assemble_turn(
     if retrieval_store is not None and user_text.strip():
         try:
             retrieved_results = retrieve(user_text, retrieval_store, top_k=top_k, model=retrieval_model)
+            if guardrails is not None:
+                retrieved_results = guardrails.json_input(retrieved_results)
             formatted_context = format_context(retrieved_results)
             if formatted_context:
                 to_send = pending[:-1] + [
                     {'role': 'system', 'content': formatted_context},
                     pending[-1],
                 ]
+        except GuardrailError:
+            raise
         except Exception as error:
-            print(f'\n[Retrieval unavailable: {error}]', file=sys.stderr)
+            detail = 'request failed' if guardrails is not None else str(error)
+            print(f'\n[Retrieval unavailable: {detail}]', file=sys.stderr)
 
     return to_send, content, retrieved_results, formatted_context
 
@@ -192,6 +202,7 @@ def persist_turn(
     user_content: str,
     assistant_content: str,
     status: str = 'completed',
+    guardrails=None,
 ) -> None:
     if session_store is None or session_id is None:
         return
@@ -199,7 +210,10 @@ def persist_turn(
         session_store.add_message(session_id, 'user', user_content, status=status)
         session_store.add_message(session_id, 'assistant', assistant_content, status=status)
     except (DatabaseError, ValueError) as error:
-        print(f"Warning: could not persist turn to session {session_id}: {error}", file=sys.stderr)
+        if guardrails is not None:
+            print('Warning: could not persist filtered conversation.', file=sys.stderr)
+        else:
+            print(f"Warning: could not persist turn to session {session_id}: {error}", file=sys.stderr)
 
 
 def execute_turn_stream(
@@ -225,6 +239,8 @@ def execute_turn_stream(
             raise error_type('Generation cancelled.')
     if guardrails is not None:
         to_send = guardrails.messages(to_send)
+        if json_output is not None:
+            guardrails.check_schema(json_output.schema)
         original_stream = s_func
 
         def checked_stream(*args, **kwargs):

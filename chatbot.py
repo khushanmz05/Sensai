@@ -660,10 +660,16 @@ def main():
         from retrieval.rag import ingest
         store = VectorStore(':memory:')
         try:
-            count = ingest(str(args.docs_dir), store)
+            count = ingest(str(args.docs_dir), store, guardrails=guardrails)
             print(f'Ingested {count} chunks from {args.docs_dir}')
+        except GuardrailError as error:
+            print(f'Ingestion blocked: {error}', file=sys.stderr)
+            store.close()
+            return 1
         except Exception as error:
-            print(f'Ingestion failed: {error}', file=sys.stderr)
+            detail = 'request failed' if guardrails is not None else str(error)
+            print(f'Ingestion failed: {detail}', file=sys.stderr)
+            store.close()
             store = None
     try:
         personas = load_personas(args.persona_dir)
