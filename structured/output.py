@@ -4,7 +4,7 @@ import json
 import math
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError, ValidationError
 
 
@@ -38,7 +38,7 @@ def strict_json(text):
 
 
 def _check_schema_tree(value):
-    # This first increment supports inline schemas only: no reference fetching.
+    # Support inline schemas only: no reference fetching.
     if isinstance(value, dict):
         if '$ref' in value or '$dynamicRef' in value:
             raise StructuredOutputError('Schema references are not supported; inline the schema.')
@@ -68,7 +68,18 @@ class JsonOutput:
         except SchemaError as error:
             raise StructuredOutputError('Invalid JSON schema: ' + error.message) from error
         self.schema = deepcopy(schema)
-        self.validator = Draft202012Validator(self.schema)
+        self.validator = Draft202012Validator(self.schema, format_checker=FormatChecker())
+
+    def parse(self, text):
+        """Consumer boundary: never accept JSON merely because it parses."""
+        try:
+            value = strict_json(text)
+            self.validator.validate(value)
+            return value
+        except ValidationError as error:
+            raise StructuredOutputError(f'JSON failed schema rule: {error.validator}.') from error
+        except (ValueError, RecursionError) as error:
+            raise StructuredOutputError('Invalid or ambiguous JSON response.') from error
 
     @classmethod
     def from_file(cls, path):
@@ -78,9 +89,11 @@ class JsonOutput:
             raise StructuredOutputError(f'Cannot load JSON schema: {error}') from error
         return cls(schema)
 
-    def generate(self, messages, generate, max_attempts=2):
+    def generate(self, messages, generate, max_attempts=2, max_chars=262144):
         if type(max_attempts) is not int or not 1 <= max_attempts <= 5:
             raise StructuredOutputError('JSON attempts must be an integer from 1 to 5.')
+        if type(max_chars) is not int or max_chars < 1:
+            raise StructuredOutputError('JSON output limit must be a positive integer.')
         pending = deepcopy(messages)
         instruction = ('Return only a JSON object matching this schema, without Markdown: '
                        + json.dumps(self.schema, ensure_ascii=False, allow_nan=False))
@@ -91,7 +104,21 @@ class JsonOutput:
         reason = ''
         for attempt in range(max_attempts):
             # Buffer until complete: unvalidated fragments never reach the UI.
-            raw = ''.join(generate(deepcopy(pending), deepcopy(self.schema)))
+            source = iter(generate(deepcopy(pending), deepcopy(self.schema)))
+            chunks, size = [], 0
+            try:
+                for chunk in source:
+                    if not isinstance(chunk, str):
+                        raise StructuredOutputError('Model returned a non-text chunk.')
+                    size += len(chunk)
+                    if size > max_chars:
+                        raise StructuredOutputError('Structured response exceeds the size limit.')
+                    chunks.append(chunk)
+            finally:
+                close = getattr(source, 'close', None)
+                if close is not None:
+                    close()
+            raw = ''.join(chunks)
             try:
                 result = strict_json(raw)
                 self.validator.validate(result)

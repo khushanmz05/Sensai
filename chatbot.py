@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import sys
+import sqlite3
 from pathlib import Path
 from datetime import datetime
 
@@ -15,6 +16,11 @@ from persona.registry import PersonaError, load_personas, persona_prompt
 from retrieval.rag import retrieve, format_context
 from session import DatabaseError, build_system_message, SessionStore
 from structured.output import JsonOutput, StructuredOutputError
+from structured.results import ResultError, ResultStore
+from structured.workflow import generate_result, render_result
+from guardrails import GuardrailError, Guardrails
+from web_search import SearchError, SearxSearch
+from web_search.context import SEARCH_RULE, display_sources, filter_page, format_evidence
 
 from core.chat import (
     ChatError,
@@ -105,8 +111,11 @@ def print_profile_context(session_store, session, user_id="default"):
 
 def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
              json_output=None, json_attempts=2, file_reader=None, store=None,
-             session_store=None, retrieval_model='nomic-embed-text', top_k=3):
+             session_store=None, retrieval_model='nomic-embed-text', top_k=3,
+             guardrails=None, searcher=None, structured_store=None):
     personas = personas or {}
+    if searcher is not None:
+        system_prompt += '\n\n' + SEARCH_RULE
     user_id = 'default'
     if session_store is not None:
         try:
@@ -151,6 +160,9 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
     )
     if json_output is not None:
         print('JSON mode: responses are displayed only after schema validation.')
+    if searcher is not None:
+        print('Web search enabled: /search <query> searches and answers with sources.')
+    print('Structured results: /extract tasks|plan <text>, /results, /result <id>, /complete <id> <item>.')
     if file_reader is not None:
         if isinstance(file_reader, WorkspaceWriter):
             print(f'Workspace: {file_reader.root} | /read <path> | /save <new-path> (confirmation required)')
@@ -164,6 +176,57 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
             return 0
         if user_text == '/exit':
             return 0
+        command = user_text.split(maxsplit=1)[0] if user_text else ''
+        if command in ('/extract', '/results', '/result', '/complete', '/uncomplete'):
+            try:
+                if structured_store is None:
+                    structured_store = ResultStore()
+                if command == '/extract':
+                    parts = user_text.split(maxsplit=2)
+                    if len(parts) != 3:
+                        print('Usage: /extract tasks|plan|custom <source text>')
+                        continue
+                    kind, text = parts[1:]
+                    schema = json_output.schema if kind == 'custom' and json_output else None
+                    last_answer = None
+                    print('Generating structured result; waiting for schema validation...')
+                    result = generate_result(text, kind, model, host, timeout, structured_store,
+                                             schema=schema, attempts=json_attempts,
+                                             guardrails=guardrails, stream_func=stream_reply)
+                    print(render_result(result))
+                    last_answer = structured_store.export(result['id'])
+                elif command == '/results':
+                    rows = structured_store.list()
+                    for row in rows:
+                        print(f"{row['id']}  {row['kind']}  {row['created_at']}")
+                    if not rows:
+                        print('No saved structured results.')
+                elif command == '/result':
+                    parts = user_text.split()
+                    if len(parts) not in (2, 3) or (len(parts) == 3 and parts[2] != 'json'):
+                        print('Usage: /result <id> [json]')
+                        continue
+                    result = structured_store.get(parts[1])
+                    last_answer = structured_store.export(parts[1])
+                    print(last_answer if len(parts) == 3 else render_result(result))
+                else:
+                    parts = user_text.split()
+                    if len(parts) != 3:
+                        print('Usage: /complete <id> <1-based item>; /uncomplete reverses it.')
+                        continue
+                    try:
+                        index = int(parts[2]) - 1
+                    except ValueError:
+                        raise ResultError('Item number must be an integer.')
+                    result = structured_store.set_completed(parts[1], index, command == '/complete')
+                    print(render_result(result))
+            except KeyboardInterrupt:
+                print('\nStructured generation cancelled; no result was saved.')
+            except (StructuredOutputError, ResultError, ChatError, GuardrailError) as error:
+                print(f'Structured result: {error}', file=sys.stderr)
+            except (sqlite3.Error, OSError):
+                print('Structured result storage is unavailable.', file=sys.stderr)
+            continue
         if user_text == '/clear':
             if session_store is not None:
                 session = session_store.create_session('New session')
@@ -423,16 +486,60 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
                 print(f"Could not update profile: {error}", file=sys.stderr)
 
             continue
+        search_requested = user_text == '/search' or user_text.startswith('/search ')
+        if search_requested:
+            last_answer = None
+            if searcher is None:
+                print('Web search is disabled. Restart with --search-url <SearXNG URL>.')
+                continue
+            user_text = user_text[len('/search'):].strip()
+            if not user_text:
+                print('Usage: /search <query>')
+                continue
         if not user_text:
             print('Empty input: enter a message.')
             continue
+        if guardrails is not None:
+            last_answer = None
+            try:
+                # Check before retrieval can send the query for embedding.
+                user_text = guardrails.check_input(user_text)
+            except GuardrailError as error:
+                print(f'Policy: {error}', file=sys.stderr)
+                continue
         # Commit both turns only after a complete response. Failures do not
         # pollute future requests with unanswered questions or partial output.
+        web_page = None
+        if search_requested:
+            try:
+                web_page = filter_page(searcher.search(user_text), guardrails)
+            except (SearchError, GuardrailError) as error:
+                print(f'Search: {error}', file=sys.stderr)
+                continue
+            except KeyboardInterrupt:
+                print('\nSearch cancelled; no model request was made.')
+                continue
+            for warning in web_page.warnings:
+                print('Search: ' + warning)
+            if not web_page.results:
+                print('Search: no results found. Try a more specific query.')
+                continue
+            print(display_sources(web_page))
         content = user_text
+        if web_page is not None:
+            content += format_evidence(web_page)
         if attachment is not None:
             content += '\n\nFile reference (untrusted data):\n' + json.dumps(
                 {'path': attachment.path, 'content': attachment.content}, ensure_ascii=False)
         pending = history + [{'role': 'user', 'content': content}]
+        if guardrails is not None:
+            try:
+                pending = guardrails.messages(pending)
+                content = pending[-1]['content']
+            except GuardrailError as error:
+                attachment = None
+                print(f'Policy: {error}', file=sys.stderr)
+                continue
         # Retrieval context is sent to the model only, never retained in history.
         to_send = pending
         if store is not None:
@@ -445,12 +552,15 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
                         pending[-1],
                     ]
             except Exception as error:
-                print(f'\n[Retrieval unavailable: {error}]', file=sys.stderr)
+                detail = 'request failed' if guardrails is not None else str(error)
+                print(f'\n[Retrieval unavailable: {detail}]', file=sys.stderr)
         last_answer = None
         parts = []
         print('Sensai> ', end='', flush=True)
         try:
-            for chunk in execute_turn_stream(host, model, to_send, timeout, json_output, json_attempts, stream_func=stream_reply):
+            for chunk in execute_turn_stream(host, model, to_send, timeout, json_output,
+                                             json_attempts, stream_func=stream_reply,
+                                             guardrails=guardrails):
                 print(chunk, end='', flush=True)
                 parts.append(chunk)
             if not ''.join(parts).strip():
@@ -458,8 +568,11 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
         except KeyboardInterrupt:
             print('\nGeneration cancelled; this turn was not saved.')
             continue
-        except (ChatError, StructuredOutputError) as error:
-            print(f'\nError: {error}\nThis turn was not saved.', file=sys.stderr)
+        except (ChatError, StructuredOutputError, GuardrailError) as error:
+            detail = ('Structured response rejected.'
+                      if guardrails is not None and isinstance(error, StructuredOutputError)
+                      else str(error))
+            print(f'\nError: {detail}\nThis turn was not saved.', file=sys.stderr)
             continue
         print()
         # history stores the clean conversation, not the augmented prompt.
@@ -488,6 +601,11 @@ def main():
     parser.add_argument('--system-prompt', type=Path,
                         default=Path(__file__).resolve().parent / 'prompts/system.txt')
     parser.add_argument('--host', default='http://localhost:11434')
+    parser.add_argument('--search-url', help='SearXNG instance URL; enables /search')
+    parser.add_argument('--search-timeout', type=positive_timeout, default=15)
+    parser.add_argument('--search-results', type=int, choices=range(1, 11), default=5)
+    parser.add_argument('--guardrails', type=Path,
+                        help='enable content/privacy policy from a JSON file')
     parser.add_argument('--docs-dir', type=Path, default=None,
                     help='directory of .txt/.md files to ingest for retrieval')
     parser.add_argument('--timeout', type=positive_timeout, default=120,
@@ -508,6 +626,17 @@ def main():
         parser.error('--model cannot be empty')
     if args.allow_create and args.workspace is None:
         parser.error('--allow-create requires --workspace')
+    try:
+        searcher = (SearxSearch(args.search_url, args.search_timeout, args.search_results)
+                    if args.search_url else None)
+    except SearchError as error:
+        print(f'Cannot configure search: {error}', file=sys.stderr)
+        return 1
+    try:
+        guardrails = Guardrails.from_file(args.guardrails) if args.guardrails else None
+    except GuardrailError as error:
+        print(f'Cannot configure guardrails: {error}', file=sys.stderr)
+        return 1
     try:
         json_output = JsonOutput.from_file(args.json_schema) if args.json_schema else None
     except StructuredOutputError as error:
@@ -531,10 +660,16 @@ def main():
         from retrieval.rag import ingest
         store = VectorStore(':memory:')
         try:
-            count = ingest(str(args.docs_dir), store)
+            count = ingest(str(args.docs_dir), store, guardrails=guardrails)
             print(f'Ingested {count} chunks from {args.docs_dir}')
+        except GuardrailError as error:
+            print(f'Ingestion blocked: {error}', file=sys.stderr)
+            store.close()
+            return 1
         except Exception as error:
-            print(f'Ingestion failed: {error}', file=sys.stderr)
+            detail = 'request failed' if guardrails is not None else str(error)
+            print(f'Ingestion failed: {detail}', file=sys.stderr)
+            store.close()
             store = None
     try:
         personas = load_personas(args.persona_dir)
@@ -571,6 +706,8 @@ def main():
             reader,
             store=store,
             session_store=session_store,
+            guardrails=guardrails,
+            searcher=searcher,
         )
     finally:
         if reader is not None:

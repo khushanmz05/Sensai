@@ -482,6 +482,7 @@
             </div>
           </div>
         </div>
+        <a class="nav-link" href="/structured">Structured workspace</a>
         <a class="nav-link" href="/dashboard"><span class="hide-sm">Dashboard</span>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
         </a>
@@ -531,6 +532,7 @@
         </form>
         <div class="status-row">
           <span id="status" role="status">Ready</span>
+          <span id="policy-status" role="status">Checking content policy...</span>
           <span class="hide-sm"><kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>Esc</kbd> stop</span>
         </div>
       </div>
@@ -538,6 +540,16 @@
   </main>
 
   <script>
+    fetch('/api/guardrails').then(response => {
+      if (!response.ok) throw new Error('Policy status unavailable');
+      return response.json();
+    }).then(policy => {
+      document.getElementById('policy-status').textContent = policy.enabled
+        ? 'Content/privacy checks on - answers appear after validation'
+        : 'Content/privacy checks off';
+    }).catch(() => {
+      document.getElementById('policy-status').textContent = 'Content policy status unavailable';
+    });
     /* ---------- Appearance settings ---------- */
     (function () {
       const root = document.documentElement;
@@ -784,7 +796,7 @@
       logInner.appendChild(box);
     }
 
-    function addLine(kind, text) {
+    function addLine(kind, text, allowStubSuggestion = true) {
       document.getElementById('empty')?.remove();
       let node, body;
       if (kind === 'user') {
@@ -812,7 +824,7 @@
         node.innerHTML = ICON_ERR;
         body = el('span', null, text);
         node.appendChild(body);
-        if (modeSelect.value === 'ollama') {
+          if (modeSelect.value === 'ollama' && allowStubSuggestion) {
           const fix = el('button', 'fix', 'Switch to Stub mode');
           fix.type = 'button';
           fix.addEventListener('click', () => {
@@ -1003,8 +1015,8 @@
       send.disabled = true;
       cancel.disabled = false;
 
-      addLine('user', message);
-      currentMessages.push({role: 'user', content: message});
+      const userLine = addLine('user', message);
+      let safeMessage = message;
       const reply = addLine('assistant', '');
       const replyNode = reply.closest('.msg');
       replyNode.classList.add('waiting');
@@ -1023,11 +1035,15 @@
             model: modelInput.value,
           }),
         });
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        runId = (await response.json()).run_id;
+        const result = await response.json();
+        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'HTTP ' + response.status);
+        runId = result.run_id;
+        safeMessage = result.message;
+        userLine.textContent = safeMessage;
       } catch (error) {
+        userLine.closest('.msg').remove();
         replyNode.remove();
-        addLine('error', 'Could not start the run: ' + error.message);
+        addLine('error', 'Could not start the run: ' + error.message, false);
         return finish('Failed', 'fail');
       }
 
@@ -1053,6 +1069,7 @@
       currentSource.addEventListener('done', (e) => {
         const finalStatus = JSON.parse(e.data).payload.status;
         if (finalStatus === 'completed' && reply.textContent) {
+          currentMessages.push({role: 'user', content: safeMessage});
           currentMessages.push({role: 'assistant', content: reply.textContent});
         } else if (!reply.textContent) {
           replyNode.remove();
@@ -1062,7 +1079,7 @@
 
       currentSource.onerror = (e) => {
         if (e.data) {
-          addLine('error', JSON.parse(e.data).payload.message);
+          addLine('error', JSON.parse(e.data).payload.message, false);
           return;
         }
         if (currentSource && currentSource.readyState === EventSource.CLOSED) return;

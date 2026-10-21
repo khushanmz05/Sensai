@@ -58,7 +58,7 @@ def retrieve_advanced(query: str, store: VectorStore, top_k: int = 5,
 
 
 def ingest(directory: str, store: VectorStore, model: str = DEFAULT_MODEL,
-           chunk_size: int = 20, chunk_overlap: int = 5) -> int:
+           chunk_size: int = 20, chunk_overlap: int = 5, guardrails=None) -> int:
     """Read supported files from a directory, chunk them, embed them, and store them.
 
     Returns the number of chunks ingested.
@@ -75,6 +75,10 @@ def ingest(directory: str, store: VectorStore, model: str = DEFAULT_MODEL,
         path = os.path.join(directory, filename)
         with open(path, "r", encoding="utf-8") as f:
             text = f.read()
+
+        if guardrails is not None:
+            text = guardrails.check_input(text)
+            filename = guardrails.check_input(filename)
 
         chunks = chunk_text(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         if not chunks:

@@ -1,8 +1,8 @@
 # Sensai
 
 Python 3.10+ CLI chatbot using the Ollama HTTP API directly. No LLM framework or Ollama SDK.
-This working copy includes the CLI chat, personas (A5), and a first CLI-integrated
-structured-output increment (T5). RAG chunking and the web UI are early prototypes.
+This working copy includes the CLI chat, personas (A5), and structured workflows
+(T5) with persistent task lists, plans and custom records in the CLI and browser.
 T4 provides opt-in file context and creation of new files for Linux/WSL.
 The first A3 increment previews each save and requires explicit confirmation.
 It does not implement the full Sensai feature catalogue.
@@ -87,8 +87,12 @@ This increment accepts draft 2020-12 inline schemas with a top-level object and 
 `$ref`/`$dynamicRef` references. `format` annotations (such as email) are not asserted.
 Validation verifies structure, not factual accuracy or permission to execute an action.
 Both CLI examples passed on the user's local model (see docs/VERIFY.md).
-The web prototype is not connected to T5 yet; broader manual checks remain pending.
-See the examples above and `docs/VERIFY.md` for manual checks and recorded results.
+Open `/structured` in the web service to extract tasks, create plans or define
+custom fields, then complete checklist items and download validated JSON.
+CLI equivalents start with `/extract tasks <text>` and `/extract plan <goal>`.
+Results persist across restarts. Structured generation requires a real Ollama model
+and does not fall back to stub output. See [the workflow and verification guide](docs/STRUCTURED_WORKSPACE.md).
+The new workflow's live acceptance walkthrough remains to be run in WSL.
 
 ## Files and architecture
 
@@ -155,6 +159,37 @@ Existing files, including symbolic links, cannot be overwritten. Only `.txt`, `.
 `.py` and `.json` files up to 16 KiB are allowed. Parent directories must already exist.
 This is a synchronous CLI approval for creating a new file, not general agent approval,
 editing, scheduling or publication. The model cannot approve its own output.
+
+## Content and privacy guardrails (EV2, member B)
+
+```bash
+python3 chatbot.py --model llama3.2:1b --guardrails guardrails/demo.json
+
+# Web chat and structured workflows use the same server-owned policy:
+SENSAI_GUARDRAILS=guardrails/demo.json python3 -m uvicorn web.app:app --host 127.0.0.1 --port 8000
+```
+
+Opt-in input/output phrase rules and email/international-phone redaction.
+Enabled mode buffers responses before display and validates JSON again after
+filtering. CLI and web chat filter requests before the model and responses before
+display, history, and event logs. New snapshots and artifact content are filtered;
+legacy exports that would expose personal data are refused without rewriting old records.
+The web interface shows whether the configured checks are active.
+See [configuration and limits](docs/GUARDRAILS.md) and the
+[web verification walkthrough](docs/EV2_WEB_VERIFY.md).
+
+## Live web search (T3, member B)
+
+```bash
+python3 chatbot.py --model llama3.2:1b --search-url http://127.0.0.1:8088
+```
+
+Enter `/search Python asyncio documentation` to search and answer with sources.
+Requires a running SearXNG instance with JSON enabled. See
+[local provider setup, demos and verification](docs/WEB_SEARCH.md).
+Search snippets and URLs enter the conversation as untrusted evidence; the CLI
+reports failed or empty searches without asking the model to invent results.
+Works with `--guardrails`, file context, local RAG and structured JSON output.
 
 ## Tests
 

@@ -1,0 +1,6 @@
+{
+  "blocked_input": ["reveal employee salaries", "steal passwords"],
+  "blocked_output": ["CONFIDENTIAL_INTERNAL_ONLY"],
+  "redact": ["email", "phone"],
+  "max_output_chars": 65536
+}

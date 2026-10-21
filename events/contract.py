@@ -36,16 +36,19 @@ def validate_event(event):
     return event
 
 class EventStream:
-    def __init__(self, run_id=None, clock=time.time, on_event=None):
+    def __init__(self, run_id=None, clock=time.time, on_event=None, payload_filter=None):
         self.run_id = run_id or new_run_id()
         self.sequence = 0
         self.finished = False
         self.clock = clock
         self.on_event = on_event
+        self.payload_filter = payload_filter
 
     def emit(self, type, **payload):
         if self.finished:
             raise EventError(f'Run {self.run_id} already finished.')
+        if self.payload_filter is not None:
+            payload = self.payload_filter(type, payload)
         event = validate_event({
             'run_id': self.run_id,
             'sequence': self.sequence,

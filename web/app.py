@@ -13,6 +13,9 @@ import uuid
 
 from fastapi import FastAPI, HTTPException, Query, Response, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler, http_exception_handler
 from pydantic import BaseModel
 
 from artifacts.service import (
@@ -46,11 +49,48 @@ from retrieval.rag import format_context, ingest, retrieve
 from retrieval.store import VectorStore
 from session import DatabaseError, SessionStore, build_system_message
 from structured.output import JsonOutput, StructuredOutputError, strict_json
+from structured.api import install_routes as install_structured_routes
+from guardrails import GuardrailError
+from guardrails.web import input_value, output_value, require_safe_export
 
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
 SCHEMAS_DIR = Path(__file__).resolve().parent.parent / 'schemas'
 
 app = FastAPI(title='Sensai Shared Service')
+install_structured_routes(app, settings)
+
+
+@app.exception_handler(GuardrailError)
+async def policy_error_handler(request, error):
+    return JSONResponse(status_code=422, content={'detail': str(error)})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request, error):
+    if app.state.guardrails is not None:
+        # Pydantic errors may echo the rejected input, including personal data.
+        return JSONResponse(status_code=422, content={'detail': 'Invalid request fields.'})
+    return await request_validation_exception_handler(request, error)
+
+
+@app.exception_handler(HTTPException)
+async def http_error_handler(request, error):
+    if app.state.guardrails is not None:
+        try:
+            error.detail = app.state.guardrails.json_output(error.detail)
+        except GuardrailError:
+            error.detail = 'Request rejected by the configured policy.'
+    return await http_exception_handler(request, error)
+
+
+@app.get('/api/guardrails')
+def policy_status():
+    policy = app.state.guardrails
+    return {'enabled': policy is not None,
+            'redact': list(policy.redactions) if policy else [],
+            'input_rules': len(policy.input_terms) if policy else 0,
+            'output_rules': len(policy.output_terms) if policy else 0,
+            'buffered_output': policy is not None}
 
 app.state.delay = 0.03  # seconds between fake chunks in stub mode
 app.state.mode = settings.mode  # 'ollama' or 'stub'
@@ -228,12 +268,16 @@ def list_personas():
 
 def format_session_response(session: Dict[str, Any], store: SessionStore) -> Dict[str, Any]:
     messages = store.get_messages(session['id'])
+    messages = [dict(message, content=(input_value(app, message['content'])
+                                      if message['role'] == 'user'
+                                      else output_value(app, message['content'])))
+                for message in messages]
     history = [{'role': m['role'], 'content': m['content']} for m in messages]
     persona_id = session.get('persona_id') or store.get_session_persona(session['id'])
     return {
         'session_id': session['id'],
         'id': session['id'],
-        'title': session['title'],
+        'title': output_value(app, session['title']),
         'persona_id': persona_id,
         'turns_count': len(messages),
         'history': history,
@@ -254,7 +298,7 @@ def list_sessions():
 @app.post('/api/sessions')
 def create_session(req: CreateSessionRequest):
     sess = app.state.session_store.create_session(
-        title=req.title,
+        title=input_value(app, req.title),
         persona_id=req.persona_id,
         session_id=req.session_id,
     )
@@ -297,7 +341,7 @@ def switch_session_persona(session_id: str, req: SwitchPersonaRequest):
 @app.post('/api/sessions/{session_id}/rename')
 @app.patch('/api/sessions/{session_id}')
 def rename_session(session_id: str, req: RenameSessionRequest):
-    sess = app.state.session_store.rename_session(session_id, req.title)
+    sess = app.state.session_store.rename_session(session_id, input_value(app, req.title))
     if not sess:
         raise HTTPException(status_code=404, detail='Session not found.')
     return format_session_response(sess, app.state.session_store)
@@ -315,15 +359,15 @@ def select_session(session_id: str, user_id: str = 'default'):
 
 @app.get('/api/profile')
 def get_profile(user_id: str = 'default'):
-    return app.state.session_store.get_profile(user_id)
+    return output_value(app, app.state.session_store.get_profile(user_id))
 
 
 @app.post('/api/profile')
 def save_profile(req: ProfileRequest):
     return app.state.session_store.save_profile(
         user_id=req.user_id,
-        language=req.language,
-        explanation_level=req.explanation_level,
+        language=input_value(app, req.language),
+        explanation_level=input_value(app, req.explanation_level),
         preferred_persona=req.preferred_persona,
     )
 
@@ -336,7 +380,7 @@ def list_sources():
     for c in all_chunks:
         src = c.get('source_file', 'unknown')
         sources[src] = sources.get(src, 0) + 1
-    return [{'source_file': k, 'chunks_count': v} for k, v in sources.items()]
+    return output_value(app, [{'source_file': k, 'chunks_count': v} for k, v in sources.items()])
 
 
 @app.post('/api/retrieval/ingest')
@@ -351,10 +395,12 @@ def ingest_documents(req: IngestRequest):
                 raise HTTPException(status_code=403, detail='Directory is outside the workspace.')
             if not target.is_dir():
                 raise HTTPException(status_code=404, detail='Directory not found.')
-            count = ingest(str(target), app.state.vector_store)
+            count = ingest(str(target), app.state.vector_store, guardrails=app.state.guardrails)
             return {'status': 'ingested', 'chunks_count': count, 'directory': req.directory}
         elif req.content:
-            chunks = chunk_text(req.content)
+            content = input_value(app, req.content)
+            filename = input_value(app, req.filename or 'uploaded.txt')
+            chunks = chunk_text(content)
             if not chunks:
                 return {'status': 'empty', 'chunks_count': 0}
             try:
@@ -364,16 +410,18 @@ def ingest_documents(req: IngestRequest):
                 vectors = [_deterministic_fallback_embed(c['content']) for c in chunks]
             for c, vec in zip(chunks, vectors):
                 app.state.vector_store.add(
-                    source_file=req.filename or 'uploaded.txt',
+                    source_file=filename,
                     start_line=c['start_line'],
                     end_line=c['end_line'],
                     content=c['content'],
                     embedding=vec,
                 )
-            return {'status': 'ingested', 'chunks_count': len(chunks), 'filename': req.filename}
+            return {'status': 'ingested', 'chunks_count': len(chunks), 'filename': filename}
         else:
             raise HTTPException(status_code=422, detail='Must provide directory or content.')
     except HTTPException:
+        raise
+    except GuardrailError:
         raise
     except Exception:
         raise HTTPException(status_code=500, detail='Ingestion failed.')
@@ -398,7 +446,7 @@ def create_prompt(request: CreatePromptRequest):
     try:
         return app.state.prompts.create_version(
             name=request.name,
-            content=request.content,
+            content=input_value(app, request.content),
             author=request.author,
             description=request.description,
             activate=request.activate,
@@ -412,6 +460,7 @@ def optimize_prompt(req: OptimizePromptRequest):
     try:
         active = app.state.prompts.get_active_version('system')
         initial_prompt = req.initial_prompt or (active['content'] if active else 'You are Sensai.')
+        initial_prompt = input_value(app, initial_prompt)
         
         def simple_eval(p: str, ctx: str) -> float:
             score = 0.5
@@ -469,7 +518,7 @@ def get_run(run_id: str):
     run = app.state.store.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail='Unknown run.')
-    return run
+    return output_value(app, run)
 
 
 @app.get('/api/runs/{run_id}/history')
@@ -477,15 +526,48 @@ def get_run_history(run_id: str):
     events = app.state.store.get_events(run_id)
     if not events:
         raise HTTPException(status_code=404, detail='No events for this run.')
-    return events
+    return output_value(app, events)
 
 
 
 @app.post('/api/runs')
 def start_run(request: RunRequest):
-    message = request.message.strip()
+    policy = app.state.guardrails
+    message = input_value(app, request.message.strip())
     if not message:
         raise HTTPException(status_code=422, detail='Message cannot be empty.')
+
+    target_schema = request.schema_
+    if request.schema_name:
+        if target_schema is not None:
+            raise HTTPException(status_code=422, detail='Choose schema or schema_name, not both.')
+        available = {path.stem: path for path in SCHEMAS_DIR.glob('*.json')}
+        if request.schema_name not in available:
+            raise HTTPException(status_code=422, detail='Unknown schema name.')
+        try:
+            target_schema = JsonOutput.from_file(available[request.schema_name]).schema
+        except StructuredOutputError as error:
+            raise HTTPException(status_code=422, detail=str(error))
+    if target_schema is not None:
+        if policy is not None:
+            policy.check_schema(target_schema)
+        try:
+            target_schema = JsonOutput(target_schema).schema
+        except StructuredOutputError as error:
+            raise HTTPException(status_code=422, detail=str(error))
+        if request.mode == 'stub':
+            raise HTTPException(status_code=422, detail='Structured output requires a real Ollama model.')
+
+    # Reject unsafe auxiliary inputs before retrieval, model calls or run logs.
+    if policy is not None:
+        for identifier in (request.session_id, request.persona_id, request.model, request.file_read):
+            if identifier and input_value(app, identifier) != identifier:
+                raise HTTPException(status_code=422, detail='Identifiers and paths must not contain personal data.')
+    file_write = request.file_write
+    if file_write:
+        file_write = output_value(app, input_value(app, file_write))
+        if file_write.get('path') != request.file_write.get('path'):
+            raise HTTPException(status_code=422, detail='File paths must not contain personal data.')
 
     p_id = None
     if request.persona_id is not None:
@@ -535,29 +617,21 @@ def start_run(request: RunRequest):
         retrieval_store=app.state.vector_store,
         top_k=3,
         file_enabled=(app.state.workspace_writer is not None),
+        guardrails=policy,
     )
 
-    target_schema = request.schema_
-    if request.schema_name:
-        schema_path = SCHEMAS_DIR / f"{request.schema_name}.json"
-        if not schema_path.exists():
-            raise HTTPException(status_code=422, detail=f"Schema {request.schema_name!r} not found.")
-        try:
-            target_schema = strict_json(schema_path.read_text(encoding='utf-8'))
-        except Exception as err:
-            raise HTTPException(status_code=422, detail=f"Invalid schema: {err}")
-
-    requested_mode = request.mode or app.state.mode
+    requested_mode = 'ollama' if target_schema is not None else (request.mode or app.state.mode)
     effective_mode = requested_mode
     if requested_mode == 'ollama':
         is_alive = settings.check_ollama_alive()
         if not is_alive:
-            if request.mode == 'ollama':
+            if request.mode == 'ollama' or target_schema is not None:
                 effective_mode = 'ollama'  # Explicit request: let it attempt and raise explicit connection error
             else:
                 effective_mode = 'stub'  # Auto fallback
 
-    stream = EventStream(on_event=app.state.store.record_event)
+    stream = EventStream(on_event=app.state.store.record_event,
+                         payload_filter=policy.event_payload if policy else None)
     app.state.store.record_run_metadata(
         stream.run_id,
         persona_id=session_persona,
@@ -570,6 +644,7 @@ def start_run(request: RunRequest):
 
     app.state.runs[stream.run_id] = {
         'stream': stream,
+        'guardrails': policy,
         'message': message,
         'user_content': user_content,
         'session_id': session_id,
@@ -593,9 +668,9 @@ def start_run(request: RunRequest):
         'approval_decision': None,
     }
 
-    if request.file_write and app.state.workspace_writer:
-        path = request.file_write.get('path', '')
-        content = request.file_write.get('content', '')
+    if file_write and app.state.workspace_writer:
+        path = file_write.get('path', '')
+        content = file_write.get('content', '')
         try:
             plan = app.state.workspace_writer.prepare_create(path, content)
             app.state.runs[stream.run_id]['approval_plan'] = plan
@@ -603,7 +678,8 @@ def start_run(request: RunRequest):
         except FileAccessError as err:
             raise HTTPException(status_code=422, detail=str(err))
 
-    return {'run_id': stream.run_id, 'session_id': session_id}
+    return {'run_id': stream.run_id, 'session_id': session_id, 'message': message,
+            'guardrails_enabled': policy is not None}
 
 
 @app.post('/api/runs/{run_id}/cancel')
@@ -614,6 +690,8 @@ def cancel_run(run_id: str):
     if run['stream'].finished:
         raise HTTPException(status_code=400, detail='Run already finished.')
     run['cancelled'] = True
+    if run.get('bridge') is not None:
+        run['bridge'].cancel()
     return {'run_id': run_id, 'status': 'cancelled'}
 
 
@@ -650,6 +728,7 @@ async def generate_events(run: Dict[str, Any]):
     retrieved = run.get('retrieved_results', [])
     parts: List[str] = []
     stats: Dict[str, Any] = {}
+    policy = run.get('guardrails')
 
     start_time = time.time()
     try:
@@ -713,9 +792,11 @@ async def generate_events(run: Dict[str, Any]):
                         json_output=JsonOutput(run['schema']) if run.get('schema') else None,
                         stats_collector=stats,
                         stop_event=stop_event,
+                        guardrails=policy,
                     )
                 ]
             )
+            run['bridge'] = bridge
 
             try:
                 async for event_kind, val in bridge.iter_events():
@@ -731,8 +812,10 @@ async def generate_events(run: Dict[str, Any]):
                 yield to_sse(stream.emit('error', message=str(err)))
                 yield to_sse(stream.done('failed'))
                 return
-            except StructuredOutputError as err:
-                yield to_sse(stream.emit('error', message=str(err)))
+            except (StructuredOutputError, GuardrailError) as err:
+                detail = ('Structured response rejected.' if policy and isinstance(err, StructuredOutputError)
+                          else str(err))
+                yield to_sse(stream.emit('error', message=detail))
                 yield to_sse(stream.done('failed'))
                 return
 
@@ -747,6 +830,8 @@ async def generate_events(run: Dict[str, Any]):
                 else:
                     reply_text = json.dumps({'result': run['message']})
 
+            if policy is not None:
+                reply_text = policy.output(reply_text)
             words = reply_text.split(' ')
             for index, word in enumerate(words):
                 if run.get('cancelled'):
@@ -766,15 +851,19 @@ async def generate_events(run: Dict[str, Any]):
             tokens = eval_tokens if eval_tokens > 0 else max(1, len(full_reply.split()))
             latency_ms = (time.time() - start_time) * 1000
 
-            persist_turn(app.state.session_store, session_id, user_content, full_reply)
+            persist_turn(app.state.session_store, session_id, user_content, full_reply,
+                         guardrails=policy)
 
             yield to_sse(stream.emit('metrics', tokens=tokens, latency_ms=latency_ms))
             yield to_sse(stream.done('completed'))
 
     except Exception as exc:
-        yield to_sse(stream.emit('error', message=str(exc)))
+        detail = str(exc) if not policy or isinstance(exc, GuardrailError) else 'Request failed; no unverified response was released.'
+        yield to_sse(stream.emit('error', message=detail))
         yield to_sse(stream.done('failed'))
     finally:
+        if run.get('bridge') is not None:
+            run['bridge'].cancel()
         app.state.runs.pop(stream.run_id, None)
 
 
@@ -810,15 +899,16 @@ def submit_form_response(run_id: str, req: FormResponseRequest):
     run = app.state.runs.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail='Run not found.')
-    run['form_response'] = req.answers
+    answers = input_value(app, req.answers)
+    run['form_response'] = answers
     run['form_waiting'] = False
-    return {'run_id': run_id, 'status': 'resumed', 'received': req.answers}
+    return {'run_id': run_id, 'status': 'resumed', 'received': answers}
 
 
 
 @app.get('/api/artifacts')
 def list_artifacts():
-    return app.state.artifacts.list_artifacts()
+    return output_value(app, app.state.artifacts.list_artifacts())
 
 
 @app.post('/api/artifacts')
@@ -826,8 +916,8 @@ def create_artifact(req: CreateArtifactRequest):
     try:
         return app.state.artifacts.create_artifact(
             artifact_id=req.artifact_id,
-            title=req.title,
-            initial_sections=req.sections,
+            title=output_value(app, input_value(app, req.title)),
+            initial_sections=output_value(app, input_value(app, req.sections)),
         )
     except ArtifactError as err:
         raise HTTPException(status_code=422, detail=str(err))
@@ -838,7 +928,7 @@ def get_artifact(artifact_id: str):
     art = app.state.artifacts.get_artifact(artifact_id)
     if not art:
         raise HTTPException(status_code=404, detail='Artifact not found.')
-    return art
+    return output_value(app, art)
 
 
 @app.post('/api/artifacts/{artifact_id}/patch')
@@ -848,11 +938,11 @@ def patch_artifact(artifact_id: str, req: PatchArtifactRequest):
         expected_version=req.expected_version,
         section_id=req.section_id,
         operation=req.operation,
-        value=req.value,
-        title=req.title,
+        value=output_value(app, input_value(app, req.value)),
+        title=output_value(app, input_value(app, req.title)),
     )
     try:
-        return app.state.artifacts.apply_patch(patch)
+        return output_value(app, app.state.artifacts.apply_patch(patch))
     except VersionConflictError as conflict:
         raise HTTPException(status_code=409, detail=str(conflict))
     except ArtifactError as err:
@@ -861,7 +951,7 @@ def patch_artifact(artifact_id: str, req: PatchArtifactRequest):
 
 @app.get('/api/artifacts/{artifact_id}/history')
 def get_artifact_history(artifact_id: str):
-    return app.state.artifacts.get_history(artifact_id)
+    return output_value(app, app.state.artifacts.get_history(artifact_id))
 
 
 def _pdf_disposition(name: str) -> str:
@@ -872,6 +962,7 @@ def _pdf_disposition(name: str) -> str:
 @app.get('/api/artifacts/{artifact_id}/export')
 def export_artifact(artifact_id: str, format: str = Query('md')):
     try:
+        require_safe_export(app, app.state.artifacts.get_artifact(artifact_id))
         if format == 'pdf':
             pdf_bytes = app.state.artifacts.export_as_pdf(artifact_id)
             return Response(
@@ -890,9 +981,9 @@ def export_artifact(artifact_id: str, format: str = Query('md')):
 def create_snapshot(req: PublishSnapshotRequest):
     try:
         return app.state.snapshots.publish_snapshot(
-            title=req.title,
+            title=output_value(app, input_value(app, req.title)),
             snapshot_type=req.type,
-            data=req.data,
+            data=output_value(app, input_value(app, req.data)),
             custom_id=req.custom_id,
         )
     except ExportError as err:
@@ -902,6 +993,7 @@ def create_snapshot(req: PublishSnapshotRequest):
 @app.get('/p/{snapshot_id}')
 def view_public_snapshot(snapshot_id: str):
     try:
+        require_safe_export(app, app.state.snapshots.get_snapshot(snapshot_id))
         html_page = app.state.snapshots.export_as_html(snapshot_id)
         return HTMLResponse(html_page)
     except ExportError as err:
@@ -911,6 +1003,7 @@ def view_public_snapshot(snapshot_id: str):
 @app.get('/p/{snapshot_id}/export')
 def export_public_snapshot(snapshot_id: str, format: str = Query('json')):
     try:
+        require_safe_export(app, app.state.snapshots.get_snapshot(snapshot_id))
         if format == 'md':
             return PlainTextResponse(
                 app.state.snapshots.export_as_markdown(snapshot_id),
