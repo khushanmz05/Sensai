@@ -46,11 +46,13 @@ from retrieval.rag import format_context, ingest, retrieve
 from retrieval.store import VectorStore
 from session import DatabaseError, SessionStore, build_system_message
 from structured.output import JsonOutput, StructuredOutputError, strict_json
+from structured.api import install_routes as install_structured_routes
 
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
 SCHEMAS_DIR = Path(__file__).resolve().parent.parent / 'schemas'
 
 app = FastAPI(title='Sensai Shared Service')
+install_structured_routes(app, settings)
 
 app.state.delay = 0.03  # seconds between fake chunks in stub mode
 app.state.mode = settings.mode  # 'ollama' or 'stub'
@@ -487,6 +489,25 @@ def start_run(request: RunRequest):
     if not message:
         raise HTTPException(status_code=422, detail='Message cannot be empty.')
 
+    target_schema = request.schema_
+    if request.schema_name:
+        if target_schema is not None:
+            raise HTTPException(status_code=422, detail='Choose schema or schema_name, not both.')
+        available = {path.stem: path for path in SCHEMAS_DIR.glob('*.json')}
+        if request.schema_name not in available:
+            raise HTTPException(status_code=422, detail='Unknown schema name.')
+        try:
+            target_schema = JsonOutput.from_file(available[request.schema_name]).schema
+        except StructuredOutputError as error:
+            raise HTTPException(status_code=422, detail=str(error))
+    if target_schema is not None:
+        try:
+            target_schema = JsonOutput(target_schema).schema
+        except StructuredOutputError as error:
+            raise HTTPException(status_code=422, detail=str(error))
+        if request.mode == 'stub':
+            raise HTTPException(status_code=422, detail='Structured output requires a real Ollama model.')
+
     p_id = None
     if request.persona_id is not None:
         p_id = request.persona_id.strip() or None
@@ -537,22 +558,12 @@ def start_run(request: RunRequest):
         file_enabled=(app.state.workspace_writer is not None),
     )
 
-    target_schema = request.schema_
-    if request.schema_name:
-        schema_path = SCHEMAS_DIR / f"{request.schema_name}.json"
-        if not schema_path.exists():
-            raise HTTPException(status_code=422, detail=f"Schema {request.schema_name!r} not found.")
-        try:
-            target_schema = strict_json(schema_path.read_text(encoding='utf-8'))
-        except Exception as err:
-            raise HTTPException(status_code=422, detail=f"Invalid schema: {err}")
-
-    requested_mode = request.mode or app.state.mode
+    requested_mode = 'ollama' if target_schema is not None else (request.mode or app.state.mode)
     effective_mode = requested_mode
     if requested_mode == 'ollama':
         is_alive = settings.check_ollama_alive()
         if not is_alive:
-            if request.mode == 'ollama':
+            if request.mode == 'ollama' or target_schema is not None:
                 effective_mode = 'ollama'  # Explicit request: let it attempt and raise explicit connection error
             else:
                 effective_mode = 'stub'  # Auto fallback

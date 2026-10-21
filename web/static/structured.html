@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sensai · Structured workspace</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#121212;color:#eee}
+*{box-sizing:border-box}body{margin:0}header{padding:22px 5vw;border-bottom:1px solid #333;display:flex;justify-content:space-between;gap:20px}a{color:#f7a28d}header strong{font-size:20px}main{max-width:1250px;margin:35px auto;padding:0 24px;display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:28px}section,aside{min-width:0}.panel{background:#1c1c1b;border:1px solid #363633;border-radius:14px;padding:24px;margin-bottom:20px}h1{font-size:27px;margin:0 0 12px}h2{font-size:20px;margin:0 0 16px}p{line-height:1.6}.muted{color:#aaa;font-size:13px}label{display:block;margin:16px 0 7px;font-weight:600}input,select,textarea,button{font:inherit;border:1px solid #4a4a46;border-radius:7px;padding:10px 12px;background:#242423;color:#eee}input,select,textarea{width:100%}textarea{resize:vertical;line-height:1.5}button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}button.primary{background:#e36f50;color:#121212;font-weight:700;width:100%;margin-top:18px;border-color:#e36f50}button:hover:not(:disabled){filter:brightness(1.15)}:focus-visible{outline:2px solid #f7a28d;outline-offset:3px}details{margin:16px 0}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;background:#151515;padding:16px;border-radius:8px}#status{min-height:24px;margin-top:15px}#status.error{color:#ff9b9b}.saved{display:block;text-align:left;width:100%;margin-top:8px}.item{display:flex;align-items:start;gap:12px;padding:15px 0;border-bottom:1px solid #353531}.item input{width:18px;height:18px;margin-top:4px;flex-shrink:0}.item label{margin:0;overflow-wrap:anywhere;cursor:pointer}.item.done label{text-decoration:line-through;color:#999}.badge{display:inline-block;font-size:11px;text-transform:uppercase;color:#f7a28d;margin-left:10px}.actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0}dl{padding-left:15px;border-left:2px solid #46463e}dt{font-weight:700;color:#ddd;margin-top:10px}dd{margin:6px 0 16px;overflow-wrap:anywhere}ol{padding-left:24px}li{margin:8px 0}#empty{padding:55px 20px;text-align:center;color:#aaa}#result{overflow-wrap:anywhere}.tag{font-size:12px;background:#2d3b2f;color:#b8e1bb;border-radius:5px;padding:5px 9px}#saved{max-height:320px;overflow:auto}@media(max-width:800px){main{grid-template-columns:1fr;margin-top:20px}.panel{padding:18px}header{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<header><strong>Sensai / Structured workspace</strong><nav><a href="/">Back to chat</a></nav></header>
+<main>
+<aside>
+<form id="generate" class="panel">
+<h1>Turn text into usable data</h1>
+<p class="muted">Extract tasks, build a plan, or define your own fields. Validated results are saved and can be used without copying a chat response.</p>
+<label for="kind">Result type</label><select id="kind"><option value="tasks">Task list</option><option value="plan">Action plan</option><option value="custom">Custom data</option></select>
+<label for="model">Installed Ollama model</label><input id="model" required placeholder="llama3.2:1b">
+<label for="source">Source text or goal</label><textarea id="source" rows="7" required maxlength="20000" placeholder="Fix login: high priority. Update README: low priority."></textarea>
+<details id="schema-details"><summary>Output schema</summary><p class="muted">Choose Custom data to edit the schema. Inline object schemas with nested fields and arrays are supported.</p><textarea id="schema" rows="13" readonly aria-label="JSON schema" spellcheck="false"></textarea></details>
+<button id="submit" class="primary" type="submit">Extract tasks</button>
+<p id="status" role="status" aria-live="polite"></p>
+</form>
+<section class="panel"><div class="actions"><h2>Saved results</h2><button id="refresh" type="button">Refresh</button></div><div id="saved"></div></section>
+</aside>
+<section class="panel"><div id="empty"><h2>Your result will appear here</h2><p>Tasks become a checklist. Plans become ordered steps.<br>Custom fields become a structured record.</p></div><div id="result" hidden></div></section>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let schemas = {}, selected = null, busy = false;
+const customSchema = {type:'object',properties:{name:{type:'string'},skills:{type:'array',items:{type:'string'}}},required:['name','skills'],additionalProperties:false};
+function status(text, error=false){$('status').textContent=text;$('status').className=error?'error':'';}
+async function api(url, options={}) {
+  const response=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
+  const data=await response.json();
+  if(!response.ok) throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail||data));
+  return data;
+}
+function element(tag,text){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;}
+function schemaChanged(){
+  const kind=$('kind').value;
+  $('schema').value=JSON.stringify(kind==='custom'?customSchema:schemas[kind],null,2);
+  $('schema').readOnly=kind!=='custom';$('schema-details').open=kind==='custom';
+  $('submit').textContent=kind==='tasks'?'Extract tasks':kind==='plan'?'Create plan':'Extract data';
+}
+function renderValue(value, depth=0){
+  if(depth>15)return element('p','Nested value: see validated JSON below.');
+  if(Array.isArray(value)){const list=element('ol');for(const item of value){const li=element('li');li.append(renderValue(item,depth+1));list.append(li);}return list;}
+  if(value!==null&&typeof value==='object'){const list=element('dl');for(const [key,item]of Object.entries(value)){list.append(element('dt',key));const dd=element('dd');dd.append(renderValue(item,depth+1));list.append(dd);}return list;}
+  return element('span',value===null?'null':String(value));
+}
+function render(record){
+  selected=record.id;$('empty').hidden=true;const target=$('result');target.hidden=false;target.replaceChildren();
+  target.append(element('h2',record.kind==='tasks'?'Your tasks':record.kind==='plan'?record.data.goal:'Extracted record'));
+  const top=element('div');top.className='actions';const tag=element('span','Schema validated');tag.className='tag';
+  const download=element('a','Download JSON');download.href='/api/structured/results/'+encodeURIComponent(record.id)+'/export';download.download='sensai-result.json';top.append(tag,download);target.append(top);
+  const meta=element('p',new Date(record.created_at).toLocaleString()+' · '+record.model);meta.className='muted';target.append(meta);
+  if(record.kind==='tasks'||record.kind==='plan'){
+    const items=record.kind==='tasks'?record.data.tasks:record.data.steps;
+    if(!items.length)target.append(element('p','No actionable tasks found in the source text.'));
+    items.forEach((item,index)=>{
+      const row=element('div');row.className='item'+(record.completed[index]?' done':'');
+      const box=element('input');box.type='checkbox';box.checked=record.completed[index];box.id='item-'+index;
+      const label=element('label',record.kind==='tasks'?item.title:(index+1)+'. '+item);label.htmlFor=box.id;
+      if(record.kind==='tasks'){const priority=element('span',item.priority);priority.className='badge';label.append(priority);}
+      box.addEventListener('change',async()=>{
+        box.disabled=true;
+        try{const updated=await api('/api/structured/results/'+record.id+'/completion',{method:'PATCH',body:JSON.stringify({index,completed:box.checked})});if(selected===record.id)render(updated);}
+        catch(error){box.checked=record.completed[index];box.disabled=false;status(error.message,true);}
+      });row.append(box,label);target.append(row);
+    });
+  }else target.append(renderValue(record.data));
+  const details=element('details');details.append(element('summary','Validated JSON'),element('pre',JSON.stringify(record.data,null,2)));target.append(details);
+  const schema=element('details');schema.append(element('summary','Schema used for this result'),element('pre',JSON.stringify(record.schema,null,2)));target.append(schema);
+}
+async function refresh(){
+  const rows=await api('/api/structured/results');$('saved').replaceChildren();
+  if(!rows.length)$('saved').append(element('p','No results yet.'));
+  for(const row of rows){const button=element('button',row.kind+' · '+new Date(row.created_at).toLocaleString());button.type='button';button.className='saved';button.addEventListener('click',async()=>{try{render(await api('/api/structured/results/'+row.id));}catch(error){status(error.message,true);}});$('saved').append(button);}
+}
+$('generate').addEventListener('submit',async event=>{
+  event.preventDefault();if(busy)return;
+  const payload={kind:$('kind').value,text:$('source').value,model:$('model').value.trim()};
+  try{if(payload.kind==='custom')payload.schema=JSON.parse($('schema').value);}catch(error){status('Invalid schema JSON: '+error.message,true);return;}
+  busy=true;$('submit').disabled=true;status('Generating with Ollama, then validating. Nothing is saved until validation succeeds.');
+  try{const record=await api('/api/structured/generate',{method:'POST',body:JSON.stringify(payload)});render(record);status('Validated and saved.');await refresh();}
+  catch(error){status(error.message,true);}
+  finally{busy=false;$('submit').disabled=false;}
+});
+$('kind').addEventListener('change',schemaChanged);
+$('refresh').addEventListener('click',()=>refresh().catch(error=>status(error.message,true)));
+(async()=>{try{const config=await api('/api/structured/schemas');schemas=config.schemas;$('model').value=config.model;schemaChanged();await refresh();}catch(error){status(error.message,true);}})();
+</script>
+</body>
+</html>
