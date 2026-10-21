@@ -15,6 +15,7 @@ from persona.registry import PersonaError, load_personas, persona_prompt
 from retrieval.rag import retrieve, format_context
 from session import DatabaseError, build_system_message, SessionStore
 from structured.output import JsonOutput, StructuredOutputError
+from guardrails import GuardrailError, Guardrails
 
 from core.chat import (
     ChatError,
@@ -105,7 +106,8 @@ def print_profile_context(session_store, session, user_id="default"):
 
 def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
              json_output=None, json_attempts=2, file_reader=None, store=None,
-             session_store=None, retrieval_model='nomic-embed-text', top_k=3):
+             session_store=None, retrieval_model='nomic-embed-text', top_k=3,
+             guardrails=None):
     personas = personas or {}
     user_id = 'default'
     if session_store is not None:
@@ -426,6 +428,14 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
         if not user_text:
             print('Empty input: enter a message.')
             continue
+        if guardrails is not None:
+            last_answer = None
+            try:
+                # Check before retrieval can send the query for embedding.
+                user_text = guardrails.check_input(user_text)
+            except GuardrailError as error:
+                print(f'Policy: {error}', file=sys.stderr)
+                continue
         # Commit both turns only after a complete response. Failures do not
         # pollute future requests with unanswered questions or partial output.
         content = user_text
@@ -433,6 +443,14 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
             content += '\n\nFile reference (untrusted data):\n' + json.dumps(
                 {'path': attachment.path, 'content': attachment.content}, ensure_ascii=False)
         pending = history + [{'role': 'user', 'content': content}]
+        if guardrails is not None:
+            try:
+                pending = guardrails.messages(pending)
+                content = pending[-1]['content']
+            except GuardrailError as error:
+                attachment = None
+                print(f'Policy: {error}', file=sys.stderr)
+                continue
         # Retrieval context is sent to the model only, never retained in history.
         to_send = pending
         if store is not None:
@@ -445,12 +463,15 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
                         pending[-1],
                     ]
             except Exception as error:
-                print(f'\n[Retrieval unavailable: {error}]', file=sys.stderr)
+                detail = 'request failed' if guardrails is not None else str(error)
+                print(f'\n[Retrieval unavailable: {detail}]', file=sys.stderr)
         last_answer = None
         parts = []
         print('Sensai> ', end='', flush=True)
         try:
-            for chunk in execute_turn_stream(host, model, to_send, timeout, json_output, json_attempts, stream_func=stream_reply):
+            for chunk in execute_turn_stream(host, model, to_send, timeout, json_output,
+                                             json_attempts, stream_func=stream_reply,
+                                             guardrails=guardrails):
                 print(chunk, end='', flush=True)
                 parts.append(chunk)
             if not ''.join(parts).strip():
@@ -458,8 +479,11 @@ def run_chat(model, system_prompt, host, timeout, personas=None, active=None,
         except KeyboardInterrupt:
             print('\nGeneration cancelled; this turn was not saved.')
             continue
-        except (ChatError, StructuredOutputError) as error:
-            print(f'\nError: {error}\nThis turn was not saved.', file=sys.stderr)
+        except (ChatError, StructuredOutputError, GuardrailError) as error:
+            detail = ('Structured response rejected.'
+                      if guardrails is not None and isinstance(error, StructuredOutputError)
+                      else str(error))
+            print(f'\nError: {detail}\nThis turn was not saved.', file=sys.stderr)
             continue
         print()
         # history stores the clean conversation, not the augmented prompt.
@@ -488,6 +512,8 @@ def main():
     parser.add_argument('--system-prompt', type=Path,
                         default=Path(__file__).resolve().parent / 'prompts/system.txt')
     parser.add_argument('--host', default='http://localhost:11434')
+    parser.add_argument('--guardrails', type=Path,
+                        help='enable content/privacy policy from a JSON file')
     parser.add_argument('--docs-dir', type=Path, default=None,
                     help='directory of .txt/.md files to ingest for retrieval')
     parser.add_argument('--timeout', type=positive_timeout, default=120,
@@ -508,6 +534,11 @@ def main():
         parser.error('--model cannot be empty')
     if args.allow_create and args.workspace is None:
         parser.error('--allow-create requires --workspace')
+    try:
+        guardrails = Guardrails.from_file(args.guardrails) if args.guardrails else None
+    except GuardrailError as error:
+        print(f'Cannot configure guardrails: {error}', file=sys.stderr)
+        return 1
     try:
         json_output = JsonOutput.from_file(args.json_schema) if args.json_schema else None
     except StructuredOutputError as error:
@@ -571,6 +602,7 @@ def main():
             reader,
             store=store,
             session_store=session_store,
+            guardrails=guardrails,
         )
     finally:
         if reader is not None:
