@@ -653,6 +653,11 @@ def start_run(request: RunRequest):
         'messages': to_send,
         'retrieved_results': retrieved_results,
         'formatted_context': formatted_context,
+        'cache_context_independent': (
+            attachment is None
+            and not retrieved_results
+            and not file_write
+        ),
         'mode': effective_mode,
         'host': host,
         'model': model,
@@ -793,6 +798,10 @@ async def generate_events(run: Dict[str, Any]):
                         stats_collector=stats,
                         stop_event=stop_event,
                         guardrails=policy,
+                        cache_context_independent=run.get(
+                            'cache_context_independent',
+                            False,
+                        ),
                     )
                 ]
             )
