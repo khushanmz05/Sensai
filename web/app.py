@@ -36,6 +36,7 @@ from core.chat import (
 from core.config import settings
 from events.contract import EventStream, to_sse
 from events.store import EventStore
+from evaluation.judge import EvaluationError, evaluate_response
 from export.service import ExportError, SnapshotStore, sanitize_snapshot_data
 from file_access.reader import FileAccessError, FileSnapshot, SUPPORTED, WorkspaceReader
 from file_access.writer import CreatePlan, WorkspaceWriter
@@ -371,6 +372,55 @@ def save_profile(req: ProfileRequest):
         preferred_persona=req.preferred_persona,
     )
 
+
+
+@app.post('/api/retrieval/upload')
+async def upload_retrieval_document(file: UploadFile = File(...)):
+    """Upload and index a UTF-8 TXT or Markdown document for RAG."""
+    max_bytes = 5 * 1024 * 1024
+    original_name = Path(file.filename or '').name
+    suffix = Path(original_name).suffix.lower()
+    if not original_name or suffix not in {'.txt', '.md'}:
+        raise HTTPException(status_code=415, detail='Upload a .txt or .md document.')
+
+    raw = await file.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise HTTPException(status_code=413, detail='Document exceeds the 5 MB upload limit.')
+    if not raw.strip():
+        raise HTTPException(status_code=422, detail='The document is empty.')
+    try:
+        content = raw.decode('utf-8-sig')
+    except UnicodeDecodeError as error:
+        raise HTTPException(status_code=400, detail='Document must be UTF-8 text.') from error
+
+    content = input_value(app, content)
+    filename = input_value(app, original_name)
+    chunks = chunk_text(content)
+    if not chunks:
+        raise HTTPException(status_code=422, detail='The document contains no indexable text.')
+
+    contents = [chunk['content'] for chunk in chunks]
+    try:
+        vectors = embed(contents)
+    except Exception:
+        from retrieval.rag import _deterministic_fallback_embed
+        vectors = [_deterministic_fallback_embed(text) for text in contents]
+
+    for chunk, vector in zip(chunks, vectors):
+        app.state.vector_store.add(
+            source_file=filename,
+            start_line=chunk['start_line'],
+            end_line=chunk['end_line'],
+            content=chunk['content'],
+            embedding=vector,
+        )
+
+    return {
+        'status': 'ingested',
+        'filename': filename,
+        'chunks_count': len(chunks),
+        'message': f'Indexed {filename} into {len(chunks)} chunk(s).',
+    }
 
 
 @app.get('/api/retrieval/sources')
@@ -856,6 +906,42 @@ async def generate_events(run: Dict[str, Any]):
             yield to_sse(stream.done('cancelled'))
         else:
             full_reply = ''.join(parts)
+
+            # EV1 runs after the exact streamed answer has been assembled.  It
+            # is advisory, so a skipped or failed evaluator never affects chat.
+            if (
+                mode == 'ollama'
+                and run.get('formatted_context')
+                and not run.get('schema')
+                and policy is None
+                and full_reply.strip()
+            ):
+                try:
+                    evaluation = await asyncio.to_thread(
+                        evaluate_response,
+                        question=run['message'],
+                        answer=full_reply,
+                        context=run['formatted_context'],
+                        host=run['host'],
+                        model=os.environ.get('SENSAI_EVAL_MODEL') or run['model'],
+                    )
+                except EvaluationError:
+                    # Evaluation is advisory; judge outages must not fail chat.
+                    evaluation = {'status': 'failed', 'reason': 'evaluator_unavailable'}
+            else:
+                if mode != 'ollama':
+                    reason = 'stub_mode'
+                elif run.get('schema'):
+                    reason = 'structured_output'
+                elif policy is not None:
+                    reason = 'guardrails_enabled'
+                elif not full_reply.strip():
+                    reason = 'empty_answer'
+                else:
+                    reason = 'no_source_context'
+                evaluation = {'status': 'skipped', 'reason': reason}
+            yield to_sse(stream.emit('evaluation', **evaluation))
+
             eval_tokens = (stats.get('prompt_eval_count') or 0) + (stats.get('eval_count') or 0)
             tokens = eval_tokens if eval_tokens > 0 else max(1, len(full_reply.split()))
             latency_ms = (time.time() - start_time) * 1000

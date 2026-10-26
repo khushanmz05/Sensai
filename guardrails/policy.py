@@ -85,7 +85,7 @@ class Guardrails:
 
     def event_payload(self, event_type, payload):
         # Control events must still be deliverable when generation is refused.
-        if event_type in ('error', 'done', 'metrics'):
+        if event_type in ('error', 'done', 'metrics', 'evaluation'):
             return self._map_strings(payload, self.redact)
         return self.json_output(payload)
 
