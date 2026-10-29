@@ -1,0 +1,2 @@
+# Local demo only: settings.yml disables the limiter on the loopback service.
+# Keep the default bot-detection configuration; there are no custom overrides.

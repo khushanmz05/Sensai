@@ -1,5 +1,26 @@
 # Verification
 
+## T3 CLI and web: 29 October 2026
+
+Branch `b-t3-search`, based on main `dc16e46`: **320 tests and 148 subtests**
+passed in 37.05 seconds, no skips, one existing Pydantic warning. Eleven new tests
+cover async HTTP errors/limits/deadline/cancellation, web sources/privacy/history,
+local notes without sending them to search engines, empty/failed searches, and
+Stop/disconnect at provider/model boundaries. These use controlled transports.
+
+Real SearXNG revision `cff884f98b1141bb6d5d3f104094fddafba78ef1` ran in a separate
+WSL Python environment. Queries returned official TaskGroup, SQLite and logging
+documentation. Real `qwen3:0.6b` used a local note and SQLite web results, then
+answered Python/SQLite with source URLs in a follow-up. Browser checks displayed
+clickable sources and answers, a real error after stopping the provider, and
+recovery after restarting it. Pressing Stop during a live browser search also
+reached `Run cancelled`. The final config selects Brave, DuckDuckGo and
+Google CSE. Some queries reported partial engine failures. Docker was unavailable.
+
+Source delivery does not establish answer accuracy: the small model produced
+inaccurate technical claims in browser answers. No universal citation checking,
+full-page reading or prompt-injection guarantee is claimed. See WEB_SEARCH.md.
+
 ## T1 MCP: 29 October 2026
 
 Web follow-up: the full suite passed **309 tests and 132 subtests** in 37.06

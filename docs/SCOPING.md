@@ -37,6 +37,12 @@ Approve/Reject, approval expiry and Stop. Non-stdio MCP transports remain outsid
 this increment.
 See MCP.md and VERIFY.md; the older overall status above is historical.
 
+**T3 update (29 October 2026):** CLI and web search use a shared SearXNG parser
+and evidence format. Source cards, cancellation, policy filtering and failures
+are integrated. A pinned local provider runs in WSL without Docker. Live checks
+and 320 automated tests passed; see WEB_SEARCH.md. Search remains user-triggered
+and consumes snippets, not full pages.
+
 Assignment constraints: Python 3.10+; all model calls must use the Ollama HTTP API directly,
 including embeddings, agents, evaluation and prompt optimization. Do not use LangChain,
 LlamaIndex, Haystack or equivalent LLM frameworks. Utility libraries for HTTP, databases,

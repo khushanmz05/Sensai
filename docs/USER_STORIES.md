@@ -169,6 +169,9 @@ Owner: B. First integration target: week 3.
 
 ## T3-1 — Find current documentation
 
+CLI/web implementation and real SearXNG/Ollama verification, 29 October 2026:
+[setup, demos and limitations](WEB_SEARCH.md).
+
 As a developer using Sensai, I want to find current documentation, so that I can use recent information.
 
 Acceptance criteria:
@@ -179,6 +182,10 @@ Acceptance criteria:
 Owner: B. First integration target: week 2.
 
 ## T3-2 — Compare web results with a local note
+
+The CLI `/read` + `/search` + follow-up passed with the real project note,
+SQLite search results and Ollama. The web API can also attach a local note;
+its search toolbar has no file picker. See [walkthrough](WEB_SEARCH.md).
 
 As a developer using Sensai, I want to compare web results with a local note, so that I can identify outdated material.
 

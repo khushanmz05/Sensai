@@ -191,6 +191,12 @@ Search snippets and URLs enter the conversation as untrusted evidence; the CLI
 reports failed or empty searches without asking the model to invent results.
 Works with `--guardrails`, file context, local RAG and structured JSON output.
 
+For a local WSL provider without Docker, run `python deploy/search/local.py --install`
+once; later use `python deploy/search/local.py`. Keep it running, start the web
+server with `SENSAI_SEARCH_URL=http://127.0.0.1:8088`, and select **Web search**.
+The browser shows sources and supports Stop. See the
+[two-terminal walkthrough](docs/WEB_SEARCH.md#web-chat-and-local-provider-without-docker).
+
 ## MCP tools (T1, member B)
 
 The CLI can discover and call real MCP tools chosen by the model. The supplied

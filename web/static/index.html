@@ -500,6 +500,7 @@
           <option value="stub" data-sub="Simulated replies, no model needed">Stub</option>
           <option value="ollama" data-sub="Local model through the Ollama HTTP API">Ollama</option>
           <option value="mcp" data-sub="Model calls configured tools; some actions need approval">MCP</option>
+          <option value="search" data-sub="Search the web, then answer using sources">Web search</option>
         </select>
       </label>
       <label class="chip">Model
@@ -535,6 +536,7 @@
         <div class="status-row">
           <span id="status" role="status">Ready</span>
           <span id="policy-status" role="status">Checking content policy...</span>
+          <span id="search-status" role="status" hidden></span>
           <span class="hide-sm"><kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>Esc</kbd> stop</span>
         </div>
       </div>
@@ -726,6 +728,19 @@
     const modeSelect = document.getElementById('mode-select');
     const modelInput = document.getElementById('model-input');
     const mcpTools = document.getElementById('mcp-tools');
+    const searchStatus = document.getElementById('search-status');
+    let searchEnabled = false;
+    function updateSearchStatus() {
+      searchStatus.hidden = modeSelect.value !== 'search';
+      searchStatus.textContent = searchEnabled
+        ? 'Only this message is sent to the search provider. Sources are snippets, not full pages.'
+        : 'Search unavailable. Start the server with SENSAI_SEARCH_URL.';
+    }
+    fetch('/api/search').then(r => r.json()).then(info => {
+      searchEnabled = info.enabled;
+      updateSearchStatus();
+    }).catch(() => { updateSearchStatus(); });
+    modeSelect.addEventListener('change', updateSearchStatus);
 
     fetch('/api/mcp').then(r => r.json()).then(info => {
       mcpTools.disabled = !info.enabled;
@@ -1091,12 +1106,44 @@
       }
       currentSource.addEventListener('tool_call', e => {
         const data = JSON.parse(e.data).payload;
+        if (data.kind === 'search') {
+          setStatus('Searching the web…', 'busy');
+          return;
+        }
         if (data.kind !== 'mcp') return;
         toolCard('Calling ' + data.tool, data.arguments);
         setStatus('Calling ' + data.tool, 'busy');
       });
       currentSource.addEventListener('tool_result', e => {
         const data = JSON.parse(e.data).payload;
+        if (data.kind === 'search') {
+          const card = el('details', 'search-sources');
+          card.open = true;
+          card.style.cssText = 'margin:12px 0;padding:14px;border:1px solid currentColor;border-radius:10px;';
+          card.appendChild(el('summary', null, 'Web sources · ' + data.sources.length));
+          card.appendChild(el('p', null, 'Retrieved ' + data.fetched_at + ' · Search snippets'));
+          data.warnings.forEach(warning => card.appendChild(el('p', null, warning)));
+          data.sources.forEach(source => {
+            const item = el('div');
+            const link = el('a', null, '[' + source.id + '] ' + source.title);
+            // Never make provider HTML or non-HTTP schemes executable in the UI.
+            try {
+              const url = new URL(source.url);
+              if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
+                link.href = url.href;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+              }
+            } catch { /* A privacy-redacted URL can be unclickable. */ }
+            link.style.overflowWrap = 'anywhere';
+            item.append(link, el('p', null, source.snippet));
+            card.appendChild(item);
+          });
+          logInner.insertBefore(card, replyNode);
+          scrollDown();
+          setStatus(data.sources.length ? 'Sources received · preparing answer' : 'No search results', 'busy');
+          return;
+        }
         if (data.kind !== 'mcp') return;
         const card = toolCard((data.result.isError ? 'Tool error · ' : 'Result · ') + data.tool, data.result, data.result.isError);
         if (data.result.isError) card.appendChild(el('p', null, 'This tool failed. A model answer claiming success is not proof that the action worked.'));
