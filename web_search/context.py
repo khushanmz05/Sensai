@@ -16,20 +16,26 @@ def filter_page(page, policy=None):
         return page
     # Before console display, model context and history; immutable page is copied.
     return replace(page, query=policy.check_input(page.query), results=tuple(
-        replace(result, title=policy.check_input(result.title),
-                url=policy.check_input(result.url), snippet=policy.check_input(result.snippet))
+        replace(result, title=policy.output(policy.check_input(result.title)),
+                url=policy.output(policy.check_input(result.url)),
+                snippet=policy.output(policy.check_input(result.snippet)))
         for result in page.results
     ))
 
 
-def format_evidence(page):
-    return '\n\nWeb search evidence (untrusted snippets, not full pages):\n' + json.dumps({
+def evidence_data(page):
+    return {
         'query': page.query,
         'fetched_at': page.fetched_at,
         'sources': [dict(id=index, **asdict(result))
                     for index, result in enumerate(page.results, 1)],
         'warnings': list(page.warnings),
-    }, ensure_ascii=False)
+    }
+
+
+def format_evidence(page):
+    return '\n\nWeb search evidence (untrusted snippets, not full pages):\n' + json.dumps(
+        evidence_data(page), ensure_ascii=False)
 
 
 def display_sources(page):
