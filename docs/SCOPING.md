@@ -28,6 +28,15 @@ model-selected tools, general action approval and shared web integration remain
 planned; T4 and A3 are not fully accepted.
 The current collaborator has chosen member B; other member names are unconfirmed.
 
+**T1 update (29 October 2026):** the CLI now has real MCP stdio discovery and
+model-selected tool calls, using a custom restricted project server and the
+preexisting Time server. Live Ollama demonstrations passed with both servers.
+Allowlisting, argument validation, approval, timeouts and EV2 filtering are
+integrated. Web chat also uses the same loop with tool evidence, per-call
+Approve/Reject, approval expiry and Stop. Non-stdio MCP transports remain outside
+this increment.
+See MCP.md and VERIFY.md; the older overall status above is historical.
+
 Assignment constraints: Python 3.10+; all model calls must use the Ollama HTTP API directly,
 including embeddings, agents, evaluation and prompt optimization. Do not use LangChain,
 LlamaIndex, Haystack or equivalent LLM frameworks. Utility libraries for HTTP, databases,

@@ -257,6 +257,8 @@ After completing setup, use the examples in the README:
 - [Structured JSON output](README.md#structured-json-output-t5-member-b).
 - [Read a project file](README.md#read-a-project-file-t4-first-increment-linuxwsl).
 - [Save an answer with confirmation](README.md#save-an-answer-after-confirmation-t4--initial-a3).
+- [MCP tools: optional setup and two server demonstrations](docs/MCP.md), including
+  [browser launch, Approve/Reject and Stop](docs/MCP.md#web-chat-step-by-step).
 
 Exit each chat with `/exit` before starting the next example. For the full manual
 checklist and recorded verification, see [docs/VERIFY.md](docs/VERIFY.md).
