@@ -10,6 +10,7 @@ services:
       SEARXNG_PORT: "8080"
     volumes:
       - ./settings.yml:/etc/searxng/settings.yml:ro
+      - ./limiter.toml:/etc/searxng/limiter.toml:ro
       - search-cache:/var/cache/searxng
 volumes:
   search-cache:
