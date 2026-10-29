@@ -499,12 +499,14 @@
         <select id="mode-select">
           <option value="stub" data-sub="Simulated replies, no model needed">Stub</option>
           <option value="ollama" data-sub="Local model through the Ollama HTTP API">Ollama</option>
+          <option value="mcp" data-sub="Model calls configured tools; some actions need approval">MCP</option>
         </select>
       </label>
       <label class="chip">Model
         <input id="model-input" type="text" value="llama3.2:1b" spellcheck="false" autocomplete="off">
       </label>
       <span class="grow"></span>
+      <button id="mcp-tools" class="btn" type="button" disabled>MCP tools</button>
       <button id="share-btn" class="btn" type="button" title="Publish a public snapshot of this chat">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 10V2M5 5l3-3 3 3M3 9v4h10V9"/></svg><span class="hide-sm">Share</span>
       </button>
@@ -723,6 +725,27 @@
     const tokSession = document.getElementById('tok-session');
     const modeSelect = document.getElementById('mode-select');
     const modelInput = document.getElementById('model-input');
+    const mcpTools = document.getElementById('mcp-tools');
+
+    fetch('/api/mcp').then(r => r.json()).then(info => {
+      mcpTools.disabled = !info.enabled;
+      mcpTools.title = info.enabled ? 'List available tools and approval rules' : 'Start the server with SENSAI_MCP_CONFIG to enable MCP';
+    }).catch(() => { mcpTools.title = 'Could not check MCP configuration'; });
+    modeSelect.addEventListener('change', () => {
+      if (modeSelect.value === 'mcp' && modelInput.value === 'llama3.2:1b') modelInput.value = 'qwen3:0.6b';
+    });
+    mcpTools.addEventListener('click', async () => {
+      mcpTools.disabled = true;
+      try {
+        const response = await fetch('/api/mcp/tools');
+        const data = await response.json();
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Tool discovery failed');
+        const listing = addLine('sys-note', data.map(t => t.name + ' · ' + (t.approval === 'ask' ? 'approval required' : 'automatic') + '\n' + t.description).join('\n\n'));
+        listing.style.whiteSpace = 'pre-wrap';
+        listing.style.textAlign = 'left';
+      } catch (error) { addLine('error', error.message, false); }
+      finally { mcpTools.disabled = false; }
+    });
 
     const personaDD = enhanceSelect(personaSelect);
     const modeDD = enhanceSelect(modeSelect);
@@ -962,6 +985,8 @@
       setStatus(text, state);
       send.disabled = false;
       cancel.disabled = true;
+      clearBtn.disabled = false;
+      document.querySelectorAll('.mcp-action button').forEach(button => { button.disabled = true; });
       if (currentSource) {
         currentSource.close();
         currentSource = null;
@@ -1014,6 +1039,7 @@
       autosize();
       send.disabled = true;
       cancel.disabled = false;
+      clearBtn.disabled = true;
 
       const userLine = addLine('user', message);
       let safeMessage = message;
@@ -1050,6 +1076,61 @@
       currentRunId = runId;
       setStatus('Run ' + runId.slice(0, 8) + ' · thinking', 'busy');
       currentSource = new EventSource('/api/runs/' + runId + '/events');
+
+      function toolCard(title, payload, expanded = false) {
+        const card = el('details', 'mcp-action');
+        card.open = expanded;
+        card.style.cssText = 'margin:12px 0;padding:14px;border:1px solid currentColor;border-radius:10px;';
+        card.appendChild(el('summary', null, title));
+        const preview = el('pre', null, JSON.stringify(payload, null, 2));
+        preview.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font-size:12px;';
+        card.appendChild(preview);
+        logInner.insertBefore(card, replyNode);
+        scrollDown();
+        return card;
+      }
+      currentSource.addEventListener('tool_call', e => {
+        const data = JSON.parse(e.data).payload;
+        if (data.kind !== 'mcp') return;
+        toolCard('Calling ' + data.tool, data.arguments);
+        setStatus('Calling ' + data.tool, 'busy');
+      });
+      currentSource.addEventListener('tool_result', e => {
+        const data = JSON.parse(e.data).payload;
+        if (data.kind !== 'mcp') return;
+        const card = toolCard((data.result.isError ? 'Tool error · ' : 'Result · ') + data.tool, data.result, data.result.isError);
+        if (data.result.isError) card.appendChild(el('p', null, 'This tool failed. A model answer claiming success is not proof that the action worked.'));
+        setStatus('Tool returned · preparing answer', 'busy');
+      });
+      currentSource.addEventListener('approval_request', e => {
+        const data = JSON.parse(e.data).payload;
+        if (data.kind !== 'mcp') return;
+        const card = toolCard('Allow ' + data.tool + '?', data.arguments, true);
+        const note = el('p', null, 'Approve this call only. Expires in ' + data.timeout_seconds + ' seconds. Reject ends this turn.');
+        const approve = el('button', 'btn', 'Approve');
+        const reject = el('button', 'btn', 'Reject');
+        approve.type = reject.type = 'button';
+        card.append(note, approve, reject);
+        setStatus('Waiting for tool approval', 'busy');
+        async function decide(approved) {
+          if (currentRunId !== runId) return;
+          approve.disabled = reject.disabled = true;
+          try {
+            const response = await fetch('/api/runs/' + runId + '/mcp/decision', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({approval_id: data.approval_id, approved}),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Approval failed');
+            note.textContent = approved ? 'Approved for this call.' : 'Rejected. No further tools will run.';
+            card.open = false;
+          } catch (error) {
+            note.textContent = error.message + ' Use Stop to end the turn.';
+          }
+        }
+        approve.addEventListener('click', () => decide(true));
+        reject.addEventListener('click', () => decide(false));
+      });
 
       currentSource.addEventListener('text_delta', (e) => {
         if (replyNode.classList.contains('waiting')) {

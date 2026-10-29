@@ -191,6 +191,29 @@ Search snippets and URLs enter the conversation as untrusted evidence; the CLI
 reports failed or empty searches without asking the model to invent results.
 Works with `--guardrails`, file context, local RAG and structured JSON output.
 
+## MCP tools (T1, member B)
+
+The CLI can discover and call real MCP tools chosen by the model. The supplied
+configuration connects our restricted project-file server and the preexisting
+MCP Time server. Install the optional dependencies and use a tool-capable model:
+
+```bash
+python -m pip install -r requirements-mcp.txt
+ollama pull qwen3:0.6b
+python chatbot.py --model qwen3:0.6b --mcp-config configs/mcp.demo.json --guardrails guardrails/demo.json
+```
+
+Enter `/tools`, then `/mcp Read project_notes.md using the project tool. Which programming language and database are used?`.
+Approve with `yes` when prompted. Try `/mcp Use the time tool to get the current time in Europe/Madrid.`
+Only locally allowlisted tools are exposed. Calls are schema-checked, bounded and
+subject to operator-configured approval; tool results return to the model before
+its final answer. Ordinary CLI messages do not invoke MCP.
+
+For the browser, start the web server with `SENSAI_MCP_CONFIG=configs/mcp.demo.json`,
+select **Mode → MCP**, and use **MCP tools**, **Approve / Reject**, and **Stop**.
+See [step-by-step web setup](docs/MCP.md#web-chat-step-by-step) and the
+[two live demos, safety boundaries and code map](docs/MCP.md).
+
 ## Tests
 
 ```bash

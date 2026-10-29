@@ -117,6 +117,11 @@ Owner: D. First integration target: week 3.
 
 ## T1-1 — Call a custom project tool
 
+CLI implementation and live evidence (29 October 2026): [MCP walkthrough](MCP.md#two-live-acceptance-scenarios),
+custom `project__read_project_file`, approval/rejection and model continuation.
+Web MCP also supports discovery, evidence, per-call approval/rejection and Stop;
+see MCP.md for browser steps and VERIFY.md for scope and tests.
+
 As a developer using Sensai, I want to call a custom project tool, so that I can use project operations from the conversation.
 
 Acceptance criteria:
@@ -127,6 +132,9 @@ Acceptance criteria:
 Owner: B. First integration target: week 2.
 
 ## T1-2 — Connect a preexisting MCP tool
+
+CLI implementation and live evidence (29 October 2026): [MCP walkthrough](MCP.md#two-live-acceptance-scenarios),
+unmodified external Time server and model-selected `time__get_current_time`.
 
 As a developer using Sensai, I want to connect a preexisting MCP tool, so that I can extend the assistant without rebuilding the integration.
 
