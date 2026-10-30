@@ -4,6 +4,7 @@ from pathlib import Path
 import sqlite3
 import time
 import uuid
+import math
 
 import requests
 
@@ -52,6 +53,7 @@ class PromptOptimizer:
         self._mutation_templates = self._load_mutation_templates()
         self._setup_database()
 
+    
     def optimize(self, initial_prompt, ev1_evaluator, retrieval_context=''):
         if not isinstance(initial_prompt, str) or not initial_prompt.strip():
             raise OptimizationError('initial_prompt must be a non-empty string.')
@@ -61,33 +63,63 @@ class PromptOptimizer:
         run_id = uuid.uuid4().hex
         history = []
         best_prompt = initial_prompt.strip()
-        best_score = float(ev1_evaluator(best_prompt, retrieval_context))
-        self._record(run_id, history, 0, 'baseline', best_prompt, best_score, True)
+        best_score = self._validate_score(
+            ev1_evaluator(best_prompt, retrieval_context)
+        )
+
+        best_row = self._record(
+            run_id, history, 0, 'baseline', best_prompt, best_score, True
+        )
 
         plateau_count = 0
         converged = False
         completed_iterations = 0
+
         for iteration in range(1, self.max_iterations + 1):
-            candidates = self._generate_variants(best_prompt, retrieval_context)
+            candidates = self._generate_variants(
+                best_prompt, retrieval_context
+            )
             if not candidates:
                 break
 
-            best_candidate = None
+            iteration_best = None
+
             for strategy, prompt in candidates:
-                score = float(ev1_evaluator(prompt, retrieval_context))
-                row = self._record(run_id, history, iteration, strategy, prompt, score, False)
-                if best_candidate is None or score > best_candidate['score']:
-                    best_candidate = row
-            best_candidate['selected'] = True
-            self._update_selected(run_id, iteration, best_candidate['strategy'], best_candidate['prompt'])
+                if not self._preserves_requirements(
+                    initial_prompt, prompt
+                ):
+                    continue
+
+                score = self._validate_score(
+                    ev1_evaluator(prompt, retrieval_context)
+                )
+                row = self._record(
+                    run_id, history, iteration, strategy, prompt, score, False
+                )
+
+                if iteration_best is None or score > iteration_best['score']:
+                    iteration_best = row
 
             previous_score = best_score
-            if best_candidate['score'] > best_score:
-                best_score = best_candidate['score']
-                best_prompt = best_candidate['prompt']
-            improvement = self._relative_improvement(previous_score, best_score)
-            plateau_count = plateau_count + 1 if improvement < self.improvement_threshold else 0
+
+            if iteration_best and iteration_best['score'] > best_score:
+                best_score = iteration_best['score']
+                best_prompt = iteration_best['prompt']
+                best_row['selected'] = False
+                iteration_best['selected'] = True
+                best_row = iteration_best
+                self._update_selected(run_id, best_row)
+
+            improvement = self._relative_improvement(
+                previous_score, best_score
+            )
+            plateau_count = (
+                plateau_count + 1
+                if improvement < self.improvement_threshold
+                else 0
+            )
             completed_iterations = iteration
+
             if plateau_count >= self.plateau_rounds:
                 converged = True
                 break
@@ -99,6 +131,132 @@ class PromptOptimizer:
             iterations=completed_iterations,
             converged=converged,
         )
+        
+    
+    @staticmethod
+    def _validate_score(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise OptimizationError('Evaluator score must be numeric.')
+
+        score = float(value)
+
+        if not 0.0 <= score <= 1.0 or not math.isfinite(score):
+            raise OptimizationError(
+                'Evaluator score must be finite and between 0 and 1.'
+            )
+
+        return score
+
+
+
+    @staticmethod
+    def _preserves_requirements(original, candidate):
+        requirements = [
+            (
+                ('programming study assistant',),
+                ('programming study assistant',),
+            ),
+            (
+                ('simple language', 'simple explanations'),
+                ('simple language', 'simple explanations'),
+            ),
+            (
+                ('small examples', 'short examples'),
+                ('small examples', 'short examples'),
+            ),
+            (
+                ("user's language", 'user language'),
+                ("user's language", 'user language', 'language used by the user'),
+            ),
+            (
+                ('ask for missing details', 'ask for clarification'),
+                (
+                    'ask for missing details',
+                    'ask for clarification',
+                    'request clarification',
+                    'ask questions when information is missing',
+                ),
+            ),
+            (
+                ('reason behind a solution', 'reasoning behind a solution'),
+                (
+                    'reason behind a solution',
+                    'reason behind each solution',
+                    'reasoning behind a solution',
+                    'explain why a solution works',
+                    'explain the reasoning',
+                ),
+            ),
+            (
+                ('honest when uncertain', 'be honest when uncertain'),
+                (
+                    'honest when uncertain',
+                    'be honest about uncertainty',
+                    'acknowledge uncertainty',
+                    'admit when uncertain',
+                ),
+            ),
+            (
+                ('files whose contents were supplied', 'supplied files'),
+                (
+                    'files whose contents were supplied',
+                    'only discuss supplied files',
+                    'only discuss files whose contents',
+                    'only discuss files provided',
+                    'discuss only supplied files',
+                ),
+            ),
+            (
+                ('never claim to have executed code', 'never claim to have run code'),
+                (
+                    'never claim to have executed code',
+                    'do not claim to have executed code',
+                    'never claim to have run code',
+                    'do not claim to have run code',
+                ),
+            ),
+            (
+                ('changed a file', 'modified a file'),
+                (
+                    'changed a file',
+                    'modified a file',
+                    'changed files',
+                    'modified files',
+                ),
+            ),
+            (
+                ('conversation supplied to you in this session',),
+                (
+                    'conversation supplied to you in this session',
+                    'context supplied in this session',
+                    'information provided in this session',
+                    'only use the current conversation',
+                ),
+            ),
+        ]
+
+        original_lower = original.casefold()
+        candidate_lower = candidate.casefold()
+
+        for original_phrases, candidate_phrases in requirements:
+            required = any(
+                phrase in original_lower
+                for phrase in original_phrases
+            )
+
+            if not required:
+                continue
+
+            preserved = any(
+                phrase in candidate_lower
+                for phrase in candidate_phrases
+            )
+
+            if not preserved:
+                return False
+
+        return True
+
 
     def _generate_variants(self, prompt, retrieval_context):
         variants = []
@@ -121,7 +279,20 @@ class PromptOptimizer:
             'model': self.model,
             'stream': False,
             'messages': [
-                {'role': 'system', 'content': 'Rewrite prompts. Return only the final prompt text.'},
+                {
+                'role': 'system',
+                'content': (
+                    'You are a system prompt editor. Your task is to improve '
+                    'the wording of an existing system prompt without changing '
+                    'its meaning or scope. '
+                    'Preserve every instruction, responsibility, and restriction. '
+                    'Do not add new capabilities, requirements, examples, or topics. '
+                    'Do not remove, weaken, or reinterpret any instruction. '
+                    'Do not introduce placeholders or invented details. '
+                    'Do not add headings, commentary, or explanations. '
+                    'Return only the complete rewritten system prompt.'
+                ),
+            },
                 {'role': 'user', 'content': instruction},
             ],
         }
@@ -205,14 +376,26 @@ class PromptOptimizer:
             connection.close()
         return row
 
-    def _update_selected(self, run_id, iteration, strategy, prompt):
+    
+    def _update_selected(self, run_id, selected_row):
         connection = sqlite3.connect(self.db_path)
         try:
             with connection:
                 connection.execute(
+                    'UPDATE optimization_history SET selected = 0 '
+                    'WHERE run_id = ?',
+                    (run_id,),
+                )
+                connection.execute(
                     'UPDATE optimization_history SET selected = 1 '
-                    'WHERE run_id = ? AND iteration = ? AND strategy = ? AND prompt = ?',
-                    (run_id, iteration, strategy, prompt),
+                    'WHERE run_id = ? AND iteration = ? '
+                    'AND strategy = ? AND prompt = ?',
+                    (
+                        run_id,
+                        selected_row['iteration'],
+                        selected_row['strategy'],
+                        selected_row['prompt'],
+                    ),
                 )
         finally:
             connection.close()

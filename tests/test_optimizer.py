@@ -1,4 +1,6 @@
+
 """Unit tests for optimization/optimizer.py."""
+
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -13,9 +15,20 @@ class PromptOptimizerTests(unittest.TestCase):
         self.root = Path(self.temp_dir.name)
         self.prompts_dir = self.root / 'prompts'
         self.prompts_dir.mkdir()
-        (self.prompts_dir / 'rephrase.txt').write_text('Rephrase: {prompt}\n{context}', encoding='utf-8')
-        (self.prompts_dir / 'add_constraints.txt').write_text('Constrain: {prompt}\n{context}', encoding='utf-8')
-        (self.prompts_dir / 'add_examples.txt').write_text('Example: {prompt}\n{context}', encoding='utf-8')
+
+        (self.prompts_dir / 'rephrase.txt').write_text(
+            'Rephrase: {prompt}\n{context}',
+            encoding='utf-8',
+        )
+        (self.prompts_dir / 'add_constraints.txt').write_text(
+            'Constrain: {prompt}\n{context}',
+            encoding='utf-8',
+        )
+        (self.prompts_dir / 'add_examples.txt').write_text(
+            'Example: {prompt}\n{context}',
+            encoding='utf-8',
+        )
+
         self.db_path = self.root / 'history.sqlite3'
 
     def tearDown(self):
@@ -36,32 +49,51 @@ class PromptOptimizerTests(unittest.TestCase):
         optimizer = PromptOptimizer(
             model='test-model',
             max_iterations=1,
+            improvement_threshold=0.02,
+            plateau_rounds=3,
             db_path=self.db_path,
             prompts_dir=self.prompts_dir,
             variant_generator=variant_generator,
         )
-        result = optimizer.optimize('Initial prompt',
-                                    lambda prompt, _: scores[prompt],
-                                    retrieval_context='R1 context')
 
-        self.assertEqual(result.optimized_prompt, 'Initial prompt [add_constraints]')
+        result = optimizer.optimize(
+            'Initial prompt',
+            lambda prompt, _: scores[prompt],
+            retrieval_context='R1 context',
+        )
+
+        self.assertEqual(
+            result.optimized_prompt,
+            'Initial prompt [add_constraints]',
+        )
         self.assertEqual(result.best_score, 0.80)
         self.assertEqual(result.iterations, 1)
         self.assertFalse(result.converged)
         self.assertEqual(result.history[0]['strategy'], 'baseline')
-        selected = [row for row in result.history if row['selected']]
-        self.assertEqual(len(selected), 2)
+
+        selected = [
+            row for row in result.history
+            if row['selected']
+        ]
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(
+            selected[0]['strategy'],
+            'add_constraints',
+        )
 
         conn = sqlite3.connect(self.db_path)
         try:
             rows = conn.execute(
                 'SELECT COUNT(*) FROM optimization_history'
             ).fetchone()[0]
+
             chosen = conn.execute(
-                'SELECT strategy FROM optimization_history WHERE iteration = 1 AND selected = 1'
+                'SELECT strategy FROM optimization_history '
+                'WHERE iteration = 1 AND selected = 1'
             ).fetchone()[0]
         finally:
             conn.close()
+
         self.assertEqual(rows, len(result.history))
         self.assertEqual(chosen, 'add_constraints')
 
@@ -70,48 +102,178 @@ class PromptOptimizerTests(unittest.TestCase):
 
         def variant_generator(prompt, strategy, instruction):
             del prompt, instruction
+
             calls['count'] += 1
             iteration = ((calls['count'] - 1) // 3) + 1
+
             return f'iter{iteration}-{strategy}'
 
         def ev1(prompt, _):
             if prompt == 'Initial prompt':
-                return 100.0
+                return 0.50
+
             iteration = int(prompt[4:].split('-')[0])
-            return {1: 100.5, 2: 100.8, 3: 101.0, 4: 103.0}[iteration]
+
+            return {
+                1: 0.505,
+                2: 0.508,
+                3: 0.510,
+                4: 0.515,
+            }[iteration]
 
         optimizer = PromptOptimizer(
             model='test-model',
             max_iterations=10,
+            improvement_threshold=0.02,
+            plateau_rounds=3,
             db_path=self.db_path,
             prompts_dir=self.prompts_dir,
             variant_generator=variant_generator,
         )
+
         result = optimizer.optimize('Initial prompt', ev1)
 
         self.assertTrue(result.converged)
         self.assertEqual(result.iterations, 3)
-        self.assertEqual(result.best_score, 101.0)
+        self.assertEqual(result.best_score, 0.510)
 
     def test_zero_baseline_score_does_not_force_plateau(self):
-        scores = {
-            'Initial prompt': 0.0,
-            'Initial prompt [rephrase]': 0.1,
-            'Initial prompt [add_constraints]': 0.2,
-            'Initial prompt [add_examples]': 0.15,
-        }
+            scores = {
+                'Initial prompt': 0.0,
+                'Initial prompt [rephrase]': 0.1,
+                'Initial prompt [add_constraints]': 0.2,
+                'Initial prompt [add_examples]': 0.15,
+            }
 
-        optimizer = PromptOptimizer(
-            model='test-model',
-            max_iterations=1,
-            db_path=self.db_path,
-            prompts_dir=self.prompts_dir,
-            variant_generator=lambda prompt, strategy, _: f'{prompt} [{strategy}]',
-        )
-        result = optimizer.optimize('Initial prompt', lambda prompt, _: scores[prompt])
+            optimizer = PromptOptimizer(
+                model='test-model',
+                max_iterations=1,
+                db_path=self.db_path,
+                prompts_dir=self.prompts_dir,
+                variant_generator=lambda prompt, strategy, _: (
+                    f'{prompt} [{strategy}]'
+                ),
+            )
 
-        self.assertEqual(result.best_score, 0.2)
-        self.assertFalse(result.converged)
+            result = optimizer.optimize(
+                'Initial prompt',
+                lambda prompt, _: scores[prompt],
+            )
+
+            self.assertEqual(result.best_score, 0.2)
+            self.assertFalse(result.converged)
+            
+    
+def test_preserves_original_requirements():
+    original = (
+        "You are Sensai, a programming study assistant. "
+        "Explain concepts in simple language and use small examples. "
+        "Answer in the user's language. "
+        "Help the student understand the reason behind a solution. "
+        "Be honest when uncertain. "
+        "Only discuss files whose contents were supplied. "
+        "Never claim to have executed code or changed a file."
+    )
+
+    valid_candidate = (
+        "You are Sensai, a programming study assistant. "
+        "Explain concepts using simple language and small examples. "
+        "Answer in the user's language. "
+        "Explain the reason behind each solution. "
+        "Be honest when uncertain. "
+        "Only discuss supplied files. "
+        "Never claim to have executed code or modified files."
+    )
+
+    assert PromptOptimizer._preserves_requirements(
+        original, valid_candidate
+    )
+
+
+def test_rejects_candidate_missing_user_language():
+    original = (
+        "You are Sensai, a programming study assistant. "
+        "Explain concepts in simple language and use small examples. "
+        "Answer in the user's language."
+    )
+
+    candidate = (
+        "You are Sensai, a programming study assistant. "
+        "Explain concepts in simple language and use small examples."
+    )
+
+    assert not PromptOptimizer._preserves_requirements(
+        original, candidate
+    )
+
+
+def test_rejects_candidate_missing_honesty_requirement():
+    original = (
+        "You are Sensai, a programming study assistant. "
+        "Be honest when uncertain."
+    )
+
+    candidate = (
+        "You are Sensai, a programming study assistant."
+    )
+
+    assert not PromptOptimizer._preserves_requirements(
+        original, candidate
+    )
+    
+
+def test_rejects_candidate_missing_clarification_requirement():
+    original = (
+        "You are a programming study assistant. "
+        "Explain concepts in simple language and use small examples. "
+        "Answer in the user's language. "
+        "Ask for missing details when necessary. "
+        "Help the student understand the reason behind a solution. "
+        "Be honest when uncertain. "
+        "Only discuss files whose contents were supplied in the conversation. "
+        "Never claim to have executed code or changed a file."
+    )
+
+    candidate = (
+        "You are a programming study assistant. "
+        "Explain concepts in simple language and use small examples. "
+        "Answer in the user's language. "
+        "Help the student understand the reason behind a solution. "
+        "Be honest when uncertain. "
+        "Only discuss files whose contents were supplied in the conversation. "
+        "Never claim to have executed code or changed a file."
+    )
+
+    assert not PromptOptimizer._preserves_requirements(
+        original, candidate
+    )
+
+
+def test_rejects_candidate_missing_session_file_restriction():
+    original = (
+        "You are a programming study assistant. "
+        "Explain concepts in simple language and use small examples. "
+        "Answer in the user's language. "
+        "Ask for missing details when necessary. "
+        "Help the student understand the reason behind a solution. "
+        "Be honest when uncertain. "
+        "Only discuss files whose contents were supplied in the conversation. "
+        "Never claim to have executed code or changed a file."
+    )
+
+    candidate = (
+        "You are a programming study assistant. "
+        "Explain concepts in simple language and use small examples. "
+        "Answer in the user's language. "
+        "Ask for missing details when necessary. "
+        "Help the student understand the reason behind a solution. "
+        "Be honest when uncertain. "
+        "Never claim to have executed code or changed a file."
+    )
+
+    assert not PromptOptimizer._preserves_requirements(
+        original, candidate
+    )
 
 
 if __name__ == '__main__':

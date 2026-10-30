@@ -505,39 +505,197 @@ def create_prompt(request: CreatePromptRequest):
         raise HTTPException(status_code=422, detail=str(error))
 
 
+
 @app.post('/api/prompts/optimize')
 def optimize_prompt(req: OptimizePromptRequest):
     try:
         active = app.state.prompts.get_active_version('system')
-        initial_prompt = req.initial_prompt or (active['content'] if active else 'You are Sensai.')
+        initial_prompt = req.initial_prompt or (
+            active['content'] if active else 'You are Sensai.'
+        )
         initial_prompt = input_value(app, initial_prompt)
-        
-        def simple_eval(p: str, ctx: str) -> float:
-            score = 0.5
-            if 'Sensai' in p:
-                score += 0.2
-            if len(p) > 20:
-                score += 0.1
-            return min(1.0, score)
+
+        if not initial_prompt.strip():
+            raise HTTPException(
+                status_code=422,
+                detail='The initial prompt cannot be empty.',
+            )
+
+        evaluation_cases = [
+            {
+                'question': 'What is SensAI designed to do?',
+                'context': (
+                    'SensAI is an AI assistant designed to help users '
+                    'with questions, information retrieval, and '
+                    'document-based tasks.'
+                ),
+            },
+            {
+                'question': 'Which technologies does SensAI use?',
+                'context': (
+                    'SensAI uses Python and FastAPI for its backend. '
+                    'It uses Ollama to run language models locally. '
+                    'It also supports retrieval-augmented generation '
+                    'through document chunking, embeddings, and '
+                    'vector storage.'
+                ),
+            },
+            {
+                'question': 'Does SensAI support document retrieval?',
+                'context': (
+                    'SensAI supports document retrieval. Documents '
+                    'are divided into chunks, converted into embeddings, '
+                    'and stored in a vector store. Relevant chunks can '
+                    'then be retrieved to provide context for answers.'
+                ),
+            },
+            {
+                'question': 'What database does SensAI use for user sessions?',
+                'context': (
+                    'SensAI uses a SessionStore to manage user sessions. '
+                    'The supplied documentation does not specify the '
+                    'database technology used internally by SessionStore.'
+                ),
+            },
+            {
+                'question': 'Can SensAI guarantee that every answer is correct?',
+                'context': (
+                    'SensAI evaluates responses for relevance, coherence, '
+                    'faithfulness, and unsupported claims. Evaluation '
+                    'helps identify potential hallucinations, but it '
+                    'does not guarantee that every answer is correct.'
+                ),
+            },
+        ]
+
+        def evaluate_prompt(prompt: str, _: str) -> float:
+            scores = []
+
+            for case in evaluation_cases:
+                user_message = (
+                    'Answer the following question using only the '
+                    'provided source context.\n\n'
+                    f"SOURCE CONTEXT:\n{case['context']}\n\n"
+                    f"QUESTION:\n{case['question']}"
+                )
+
+                messages = [
+                    {
+                        'role': 'system',
+                        'content': prompt,
+                    },
+                    {
+                        'role': 'user',
+                        'content': user_message,
+                    },
+                ]
+
+                answer = ''.join(
+                    stream_reply(
+                        base_url=app.state.ollama_host,
+                        model=settings.default_model,
+                        messages=messages,
+                        timeout=60,
+                    )
+                )
+
+                if not answer.strip():
+                    raise OptimizationError(
+                        'Ollama returned an empty evaluation answer.'
+                    )
+
+                evaluation = evaluate_response(
+                    question=case['question'],
+                    answer=answer,
+                    context=case['context'],
+                    host=app.state.ollama_host,
+                    model=settings.default_model,
+                    timeout=60,
+                )
+
+                if evaluation.get('status') != 'completed':
+                    raise OptimizationError(
+                        'A test case could not be evaluated: '
+                        f"{evaluation.get('reason', 'unknown reason')}"
+                    )
+
+                relevance = evaluation['relevance']
+                coherence = evaluation['coherence']
+                faithfulness = evaluation['faithfulness']
+                hallucination = evaluation['hallucination_detected']
+
+                score = (
+                    0.3 * relevance
+                    + 0.2 * coherence
+                    + 0.5 * faithfulness
+                    - 0.3 * int(hallucination)
+                )
+
+                scores.append(max(0.0, min(1.0, score)))
+
+            return sum(scores) / len(scores)
 
         optimizer = PromptOptimizer(
             model=settings.default_model,
             host=app.state.ollama_host,
             max_iterations=req.max_iterations,
-            db_path=Path(settings.prompts_db).parent / 'opt_history.sqlite3',
-            variant_generator=lambda prompt, strategy, _: f"{prompt} [{strategy}]",
+            db_path=(
+                Path(settings.prompts_db).parent
+                / 'opt_history.sqlite3'
+            ),
         )
-        result = optimizer.optimize(initial_prompt, simple_eval)
+
+        result = optimizer.optimize(
+            initial_prompt,
+            evaluate_prompt,
+        )
+
+        baseline_score = result.history[0]['score']
+
+        if result.best_score <= baseline_score:
+            return {
+                'status': 'not_improved',
+                'message': (
+                    'The optimized prompt did not outperform '
+                    'the original prompt. The active prompt was unchanged.'
+                ),
+                'baseline_score': baseline_score,
+                'best_score': result.best_score,
+                'iterations': result.iterations,
+                'converged': result.converged,
+            }
+
         new_ver = app.state.prompts.create_version(
             name='system',
             content=result.optimized_prompt,
             author='optimizer',
-            description=f"{req.description} (score: {result.best_score})",
+            description=(
+                f'{req.description} '
+                f'(baseline: {baseline_score:.4f}, '
+                f'optimized: {result.best_score:.4f})'
+            ),
             activate=True,
         )
-        return {'status': 'optimized', 'version': new_ver, 'best_score': result.best_score}
-    except (PromptError, OptimizationError) as error:
+
+        return {
+            'status': 'optimized',
+            'version': new_ver,
+            'baseline_score': baseline_score,
+            'best_score': result.best_score,
+            'improvement': result.best_score - baseline_score,
+            'iterations': result.iterations,
+            'converged': result.converged,
+        }
+
+    except HTTPException:
+        raise
+    except (PromptError, OptimizationError, EvaluationError, ChatError) as error:
         raise HTTPException(status_code=422, detail=str(error))
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail='Prompt optimization failed unexpectedly.',
+        )
 
 
 @app.post('/api/prompts/{version_id}/rollback')

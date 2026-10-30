@@ -340,10 +340,27 @@ def _validate_result(
         raise EvaluationError("Invalid hallucination_detected value")
 
     raw_claims = result.get("unsupported_claims", [])
-    if not isinstance(raw_claims, list) or not all(
-        isinstance(claim, str) for claim in raw_claims
-    ):
-        raise EvaluationError("unsupported_claims must be a list of strings")
+
+    if not isinstance(raw_claims, list):
+        raise EvaluationError("unsupported_claims must be a list")
+
+    normalized_claims = []
+
+    for claim in raw_claims:
+        if isinstance(claim, str):
+            normalized_claims.append(claim)
+
+        elif isinstance(claim, list) and all(
+            isinstance(item, str) for item in claim
+        ):
+            normalized_claims.extend(claim)
+
+        else:
+            raise EvaluationError(
+                "unsupported_claims must contain strings or lists of strings"
+            )
+
+    raw_claims = normalized_claims
 
     explanation = result.get("explanation", "")
     if not isinstance(explanation, str):
@@ -512,6 +529,16 @@ EXAMPLES:
 - "Annual revenue was $100 million" is an unsupported factual assertion if
   the source has no such figure. Flag that specific assertion, while judging
   relevance and coherence independently.
+  
+STRICT OUTPUT RULES:
+- unsupported_claims MUST always be an array of plain strings.
+- NEVER return objects inside unsupported_claims.
+- Each unsupported claim must correspond to a factual assertion in ANSWER.
+- Do not flag statements explicitly supported by SOURCE CONTEXT.
+- Do not flag statements explaining that information is missing.
+- If there are no unsupported claims, return [].
+- hallucination_detected must be true if and only if unsupported_claims is non-empty.
+- Never return null for any field.
 
 IMPORTANT:
 - Do not invent facts or use outside knowledge.
