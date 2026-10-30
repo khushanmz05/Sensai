@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 import uuid
+from core.react import ReActLoop
 
 from fastapi import FastAPI, HTTPException, Query, Response, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
@@ -545,7 +546,7 @@ def get_run_history(run_id: str):
 @app.post('/api/runs')
 def start_run(request: RunRequest):
     requested_mode = request.mode or app.state.mode
-    if requested_mode not in ('stub', 'ollama', 'mcp', 'search'):
+    if requested_mode not in ('stub', 'ollama', 'mcp', 'search', 'react'):
         raise HTTPException(422, 'Unknown chat mode.')
     if requested_mode == 'mcp':
         if not app.state.mcp_servers:
@@ -865,6 +866,49 @@ async def generate_events(run: Dict[str, Any]):
                         yield to_sse(stream.emit('text_delta', text=payload.answer))
                     else:
                         yield to_sse(stream.emit(kind, **payload))
+                        elif mode == 'react':
+                        from core.react import ReActLoop
+                        reactor = ReActLoop(max_steps=5, max_time_seconds=30.0)
+
+                        # Register your tools
+                        if app.state.searcher:
+                            reactor.register_tool("web_search", lambda query: f"Web results for: {query}")
+
+                        def llm_bridge(msgs):
+                            chunks = list(execute_turn_stream(
+                                host=run['host'],
+                                model=run['model'],
+                                to_send=msgs,
+                                timeout=run['timeout'],
+                                guardrails=policy,
+                            ))
+                            return "".join(chunks)
+
+                        # Run the ReAct loop and leverage your existing EventStream to emit steps
+                        react_result = reactor.run(
+                            initial_prompt=run['message'],
+                            llm_generate_func=llm_bridge,
+                            system_prompt="You are an autonomous ReAct agent. Use JSON action blocks if tools are required."
+                        )
+
+                        # Use your native event stream to emit steps using your existing contract
+                        for trace_step in react_result["trace"]:
+                            if "tool" in trace_step:
+                                yield to_sse(stream.emit('tool_call', tool=trace_step.get("tool"),
+                                                         observation=trace_step.get("observation")))
+                            else:
+                                text = trace_step.get("model_output", "") + "\n"
+                                parts.append(text)
+                                yield to_sse(stream.emit('text_delta', text=text))
+
+                        final_text = f"\n**Final Answer:** {react_result['final_answer']} (Reason: {react_result['stopping_reason']}, Steps: {react_result['steps_taken']})"
+
+                        if policy is not None:
+                            final_text = policy.output(final_text)
+
+                        parts.append(final_text)
+                        yield to_sse(stream.emit('text_delta', text=final_text))
+
         elif mode in ('ollama', 'search'):
             bridge = RealtimeStreamBridge(
                 lambda stop_event, q: [
