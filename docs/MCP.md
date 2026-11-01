@@ -15,7 +15,7 @@ HTTP `/api/chat`; the MCP SDK supplies transport, not LLM orchestration.
 
 Open Ubuntu in the project directory. Leave an existing chat using `/exit` before
 running shell commands. Follow [START.md](../START.md) first if Python/Ollama are
-not installed. Use the branch containing this implementation (`b-mcp` until merged).
+not installed. This implementation is included in `main`.
 
 ```bash
 source .venv/bin/activate
