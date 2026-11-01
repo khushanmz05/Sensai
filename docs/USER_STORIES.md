@@ -1,663 +1,588 @@
-# User Stories — Full Sensai Scope
+# User stories
 
-Preliminary backlog: two stories for each of 28 features, 56 in total.
-B1 and A5 are implemented in the CLI. T5 has an initial CLI integration, with
-user-reported real-model passes for both examples (see VERIFY.md). Other stories describe planned or partial behavior.
-Refine wording and acceptance criteria in week 1 and verify them before acceptance.
+**56 scenarios · 28 catalogue features · two scenarios per feature**
 
-## B1-1 — Ask a question and a follow-up
+Sensai supports a software student's path from understanding a project to checking
+an example and reusing the result. Each story states the user's benefit and three
+observable acceptance checks. Repeated generic checklist text has been removed.
 
-As a developer using Sensai, I want to ask a question and a follow-up, so that I can explore a task through a continuous conversation.
+## How to use this backlog
 
-Acceptance criteria:
-- The scenario "ask a question and a follow-up" works through the shared backend with real data, without substituting a mock result.
-- Select a model and prompt without code changes; stream responses; maintain history; report errors explicitly. The CLI still works after extracting the shared backend.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Search by feature tag (`T2`, `R1`, `A7`), surface (`CLI`, `web`, `API`) or owner.
+- Keep story IDs stable when implementation changes.
+- Criteria define the acceptance target; record the outcome of each check
+  against its story ID.
+- Use [FEATURES.md](FEATURES.md) as the compact feature/evidence index and
+  [VERIFY.md](VERIFY.md) to record a result against a story ID.
 
-Owner: A. First integration target: week 1.
+## Coverage and navigation
 
-## B1-2 — Select a local model for my computer
+| Area | Features and stories |
+| --- | --- |
+| Conversation | B1-1/2, M1-1/2, A5-1/2 |
+| Memory and documents | M2-1/2, M3-1/2, M4-1/2 |
+| Tools and structured work | T1-1/2, T2-1/2, T3-1/2, T4-1/2, T5-1/2, A3-1/2 |
+| Retrieval | R1-1/2, R2-1/2 |
+| Orchestration and optimization | A1-1/2, A2-1/2, A4-1/2, A6-1/2, A7-1/2 |
+| Evaluation | EV1-1/2, EV2-1/2, EV3-1/2, EV4-1/2 |
+| Interface and lifecycle | X1-1/2, X2-1/2, X3-1/2, X4-1/2, X5-1/2 |
 
-As a developer using Sensai, I want to select a local model for my computer, so that I can work within my available hardware.
+## B1 — Local chat
 
-Acceptance criteria:
-- The scenario "select a local model for my computer" works through the shared backend with real data, without substituting a mock result.
-- Select a model and prompt without code changes; stream responses; maintain history; report errors explicitly. The CLI still works after extracting the shared backend.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`B1` `CLI` `owner-A` · [chat tests](../tests/test_chatbot.py)
 
-Owner: A. First integration target: week 1.
+### B1-1 — Ask a follow-up
 
-## M1-1 — Resume yesterday's session
+As a programming student, I want to ask follow-up questions, so that I can learn without repeating the context.
 
-As a developer using Sensai, I want to resume yesterday's session, so that I can avoid rebuilding context manually.
+- An installed model answers a question through the CLI.
+- A follow-up includes the completed earlier exchange.
+- Ordinary generation displays text progressively.
 
-Acceptance criteria:
-- The scenario "resume yesterday's session" works through the shared backend with real data, without substituting a mock result.
-- Restore messages and user preferences after restart; automatically inject the profile into context.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### B1-2 — Recover from a failed request
 
-Owner: A. First integration target: week 1–2.
+As a user, I want understandable errors, so that I can continue after a connection or model failure.
 
-## M1-2 — Save my preferred language and explanation level
+- An unavailable model produces an actionable error.
+- Empty input makes no model request.
+- A failed or cancelled answer is not added as a completed turn.
 
-As a developer using Sensai, I want to save my preferred language and explanation level, so that I can avoid repeating my preferences.
+## M1 — Sessions and profiles
 
-Acceptance criteria:
-- The scenario "save my preferred language and explanation level" works through the shared backend with real data, without substituting a mock result.
-- Restore messages and user preferences after restart; automatically inject the profile into context.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`M1` `CLI` `web` `API` `owner-A` · [session tests](../tests/test_session_store.py)
 
-Owner: A. First integration target: week 1–2.
+### M1-1 — Resume a study session
 
-## M2-1 — Continue a long session
+As a student, I want to reopen a saved conversation, so that I can continue yesterday's work.
 
-As a developer using Sensai, I want to continue a long session, so that I can stay within the context window.
+- Save a completed question and answer.
+- Restart and select the same session.
+- The next request includes that session's history.
 
-Acceptance criteria:
-- The scenario "continue a long session" works through the shared backend with real data, without substituting a mock result.
-- Show actual token counts for completed requests and an estimated budget before each request; replace older turns with a semantic summary at the threshold while preserving reference facts.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### M1-2 — Keep learning preferences
 
-Owner: A. First integration target: week 3.
+As a student, I want to save my language and explanation level, so that future answers fit my needs.
 
-## M2-2 — Preserve decisions during compression
+- Save preferences through the profile command or API.
+- Reload them after restarting.
+- The next system context includes the saved values.
 
-As a developer using Sensai, I want to preserve decisions during compression, so that I can avoid losing important project context.
+## M2 — Context budgeting and compression
 
-Acceptance criteria:
-- The scenario "preserve decisions during compression" works through the shared backend with real data, without substituting a mock result.
-- Show actual token counts for completed requests and an estimated budget before each request; replace older turns with a semantic summary at the threshold while preserving reference facts.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`M2` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
-Owner: A. First integration target: week 3.
+### M2-1 — Continue a long conversation
 
-## M3-1 — Remember the selected project version
+As a student, I want old context to be compressed, so that a long session remains usable.
 
-As a developer using Sensai, I want to remember the selected project version, so that I can reuse the decision in later sessions.
+- Show the estimated input budget before generation.
+- Summarize older turns at a defined threshold.
+- Reserve capacity for the answer without exceeding the configured budget.
 
-Acceptance criteria:
-- The scenario "remember the selected project version" works through the shared backend with real data, without substituting a mock result.
-- The model initiates validated CRUD operations on facts and relationships in SQLite; records survive restart and are separate from the raw transcript.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### M2-2 — Retain key decisions
 
-Owner: A. First integration target: week 2.
+As a developer, I want compression to preserve decisions, so that the assistant does not contradict earlier constraints.
 
-## M3-2 — Correct an outdated decision
+- Seed a long session with named decisions.
+- Trigger compression and ask about those decisions.
+- Compare retained facts with the reference list and record any loss.
 
-As a developer using Sensai, I want to correct an outdated decision, so that I can avoid relying on incorrect information.
+## M3 — Structured memory
 
-Acceptance criteria:
-- The scenario "correct an outdated decision" works through the shared backend with real data, without substituting a mock result.
-- The model initiates validated CRUD operations on facts and relationships in SQLite; records survive restart and are separate from the raw transcript.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`M3` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
-Owner: A. First integration target: week 2.
+### M3-1 — Remember a project fact
 
-## M4-1 — Maintain a project specification
+As a developer, I want the assistant to store a project decision, so that it can reuse the fact in a later conversation.
 
-As a developer using Sensai, I want to maintain a project specification, so that I can produce an up-to-date deliverable.
+- The model proposes a typed memory record.
+- A validated operation persists it separately from the transcript.
+- A new session retrieves the fact and its source.
 
-Acceptance criteria:
-- The scenario "maintain a project specification" works through the shared backend with real data, without substituting a mock result.
-- The model emits validated section-level document edits; apply them atomically with a version check and preserve unrelated sections.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### M3-2 — Correct an obsolete fact
 
-Owner: D. First integration target: week 3.
+As a developer, I want to correct stored knowledge, so that later answers use the current decision.
 
-## M4-2 — Update one section after a review
+- Select the existing fact without duplicating it.
+- Validate and persist its replacement.
+- A later lookup returns the updated value and change history.
 
-As a developer using Sensai, I want to update one section after a review, so that I can preserve previously agreed sections.
+## M4 — Living artifacts
 
-Acceptance criteria:
-- The scenario "update one section after a review" works through the shared backend with real data, without substituting a mock result.
-- The model emits validated section-level document edits; apply them atomically with a version check and preserve unrelated sections.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`M4` `API` `owner-D` · [artifact service](../artifacts/service.py)
 
-Owner: D. First integration target: week 3.
+### M4-1 — Update one document section
 
-## T1-1 — Call a custom project tool
+As a developer, I want the assistant to update a specification section, so that the deliverable stays current without losing other content.
 
-CLI implementation and live evidence (29 October 2026): [MCP walkthrough](MCP.md#two-live-acceptance-scenarios),
-custom `project__read_project_file`, approval/rejection and model continuation.
-Web MCP also supports discovery, evidence, per-call approval/rejection and Stop;
-see MCP.md for browser steps and VERIFY.md for scope and tests.
+- The model produces a parseable section edit.
+- Apply it to the expected artifact version.
+- Unrelated sections remain unchanged.
 
-As a developer using Sensai, I want to call a custom project tool, so that I can use project operations from the conversation.
+### M4-2 — Reject a conflicting edit
 
-Acceptance criteria:
-- The scenario "call a custom project tool" works through the shared backend with real data, without substituting a mock result.
-- Discover and call tools through real MCP, return results to the model and continue the response; demonstrate both a custom server and a preexisting third-party server.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a collaborator, I want outdated edits rejected, so that one update cannot silently overwrite another.
 
-Owner: B. First integration target: week 2.
+- Create two edits against the same version.
+- Accept the first and reject the stale second edit.
+- Show the current version and preserve the accepted content.
 
-## T1-2 — Connect a preexisting MCP tool
+## T1 — MCP tools
 
-CLI implementation and live evidence (29 October 2026): [MCP walkthrough](MCP.md#two-live-acceptance-scenarios),
-unmodified external Time server and model-selected `time__get_current_time`.
+`T1` `CLI` `web` `owner-B` · [MCP guide](MCP.md)
 
-As a developer using Sensai, I want to connect a preexisting MCP tool, so that I can extend the assistant without rebuilding the integration.
+### T1-1 — Read through a project tool
 
-Acceptance criteria:
-- The scenario "connect a preexisting MCP tool" works through the shared backend with real data, without substituting a mock result.
-- Discover and call tools through real MCP, return results to the model and continue the response; demonstrate both a custom server and a preexisting third-party server.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a developer, I want the assistant to consult a project file, so that its answer uses the file's actual contents.
 
-Owner: B. First integration target: week 2.
+- Discover the allowlisted project tool.
+- Show arguments and request approval before execution.
+- Return the real result to the model and display the call evidence.
 
-## T2-1 — Test a code example
+### T1-2 — Use an existing server
 
-As a developer using Sensai, I want to test a code example, so that I can verify the proposed solution works.
+As a distributed teammate, I want timezone information from a time tool, so that I can coordinate using a real result.
 
-Acceptance criteria:
-- The scenario "test a code example" works through the shared backend with real data, without substituting a mock result.
-- Execute code in an isolated container with time and resource limits; return stdout and tracebacks to the model; demonstrate correction and another execution.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Discover the preexisting time server through MCP.
+- Call the requested timezone tool according to configured approval policy.
+- Show its actual response before the model's final explanation.
 
-Owner: B. First integration target: week 3.
+## T2 — Sandboxed Python
 
-## T2-2 — Fix code using a traceback
+`T2` `CLI` `web` `owner-B` · [sandbox guide](SANDBOX.md)
 
-As a developer using Sensai, I want to fix code using a traceback, so that I can receive a corrected and retested example.
+### T2-1 — Check a calculation
 
-Acceptance criteria:
-- The scenario "fix code using a traceback" works through the shared backend with real data, without substituting a mock result.
-- Execute code in an isolated container with time and resource limits; return stdout and tracebacks to the model; demonstrate correction and another execution.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a student, I want the assistant to execute a short Python program, so that I can check its numerical answer.
 
-Owner: B. First integration target: week 3.
+- Preview and approve the generated source.
+- Execute it in the isolated runtime with time and memory limits.
+- Show actual stdout, stderr and exit code.
 
-## T3-1 — Find current documentation
+### T2-2 — Verify a correction
 
-CLI/web implementation and real SearXNG/Ollama verification, 29 October 2026:
-[setup, demos and limitations](WEB_SEARCH.md).
+As a student, I want the assistant to use a traceback, so that it fixes and reruns failing code.
 
-As a developer using Sensai, I want to find current documentation, so that I can use recent information.
+- The first program returns a real error.
+- The traceback reaches the model, which proposes a corrected program for approval.
+- A successful rerun verifies the fix; the call limit prevents endless retries.
 
-Acceptance criteria:
-- The scenario "find current documentation" works through the shared backend with real data, without substituting a mock result.
-- Run a real search query and inject results with URLs into context; report provider failures and unavailable network access explicitly.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+## T3 — Live web search
 
-Owner: B. First integration target: week 2.
+`T3` `CLI` `web` `owner-B` · [search guide](WEB_SEARCH.md)
 
-## T3-2 — Compare web results with a local note
+### T3-1 — Find current documentation
 
-The CLI `/read` + `/search` + follow-up passed with the real project note,
-SQLite search results and Ollama. The web API can also attach a local note;
-its search toolbar has no file picker. See [walkthrough](WEB_SEARCH.md).
+As a developer, I want live documentation search, so that I can inspect sources beyond the model's training data.
 
-As a developer using Sensai, I want to compare web results with a local note, so that I can identify outdated material.
+- Send the current search query to the configured provider.
+- Parse and display result URLs, snippets and retrieval time.
+- Provide those same sources to the model as reference material.
 
-Acceptance criteria:
-- The scenario "compare web results with a local note" works through the shared backend with real data, without substituting a mock result.
-- Run a real search query and inject results with URLs into context; report provider failures and unavailable network access explicitly.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### T3-2 — Understand search failure
 
-Owner: B. First integration target: week 2.
+As a user, I want search failures distinguished from evidence, so that I do not mistake an unsupported answer for research.
 
-## T4-1 — Read files from the selected project
+- Show partial-provider warnings when usable results remain.
+- Report empty or failed searches without inventing results.
+- Stop cancels the request and prevents saving a completed search answer.
 
-As a developer using Sensai, I want to read files from the selected project, so that I can inspect source code within permitted boundaries.
+## T4 — Permitted file access
 
-Current increment: `--workspace` explicitly enables read-only access; `/read`
-queues a bounded UTF-8 file for the next question. Paths outside the selected root,
-hidden paths, symlinks, hard links and non-text/oversized files are rejected.
-CLI integration is implemented; model-selected tool calls and web integration
-remain pending. See FILE_ACCESS.md for reproducible checks.
+`T4` `CLI` `MCP` `API` `owner-B` · [file guide](FILE_ACCESS.md)
 
-Acceptance criteria:
-- The scenario "read files from the selected project" works through the shared backend with real data, without substituting a mock result.
-- Check allowed roots and operation permissions before every read, create or edit; block traversal through .. and symlinks while allowing authorized operations.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### T4-1 — Attach a project note
 
-Owner: B. First integration target: week 1–2.
+As a developer, I want to attach an allowed file, so that the assistant answers from project-specific information.
 
-## T4-2 — Save a result to an allowed folder
+- Read a supported UTF-8 file below the selected workspace.
+- Attach its real contents to the next question.
+- Reject traversal, links and unsupported or oversized input.
 
-As a developer using Sensai, I want to save a result to an allowed folder, so that I can obtain a file without changing unrelated data.
+### T4-2 — Save a new answer file
 
-Current increment: `--allow-create` enables `/save <new-relative-path>` in the CLI.
-The last complete answer is previewed and saved only after `yes`. Existing files
-are never overwritten; path/size rules still apply. Editing existing files and
-model-selected tool calls remain pending. See FILE_ACCESS.md.
+As a student, I want to save a useful answer, so that I can keep it with my study materials.
 
-Acceptance criteria:
-- The scenario "save a result to an allowed folder" works through the shared backend with real data, without substituting a mock result.
-- Check allowed roots and operation permissions before every read, create or edit; block traversal through .. and symlinks while allowing authorized operations.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Preview the destination and exact content.
+- Create the file only after explicit approval.
+- Reject existing destinations and paths outside the permitted workspace.
 
-Owner: B. First integration target: week 1–2.
+## T5 — Structured results
 
-## T5-1 — Obtain a structured plan
+`T5` `CLI` `web` `owner-B` · [structured workflow](STRUCTURED_WORKSPACE.md)
 
-As a developer using Sensai, I want to obtain a structured plan, so that I can pass it to another component without manual parsing.
+### T5-1 — Turn notes into a checklist
 
-Acceptance criteria:
-- With `--json-schema schemas/plan.json`, a plan contains a nonempty `goal` and a nonempty list of nonempty `steps`, with no extra properties.
-- Invalid output is withheld and retried within `--json-attempts`; exhaustion reports an error and leaves history unchanged.
-- A real local Ollama demonstration produces a valid plan; HTTP tests alone do not establish model quality.
+As a team member, I want tasks extracted from meeting notes, so that I can track priorities and completion.
 
-Status: integrated into CLI on 10 October 2026; the user supplied a successful
-real-model run for this example. Broader manual checks and shared web integration remain pending.
+- Validate task titles and priorities against the schema before display.
+- Render a checklist and persist its completion state.
+- Reopen the result and export schema-valid task data.
 
-Owner: B. First integration target: week 1.
+### T5-2 — Reuse an action plan
 
-## T5-2 — Extract tasks in a machine-readable format
+As a student, I want a structured plan, so that another interface can use its ordered steps without parsing prose.
 
-As a developer using Sensai, I want to extract tasks in a machine-readable format, so that I can import them into another tool.
+- Generate an object containing a goal and ordered steps.
+- Retry invalid model output within a fixed limit; save no invalid result.
+- Render, reopen and export the validated plan.
 
-Acceptance criteria:
-- With `--json-schema schemas/tasks.json`, every extracted task has a nonempty `title` and a `priority` of low, medium or high; extra properties are rejected.
-- Only validated JSON is displayed and committed to history; malformed JSON, missing fields and invalid priorities are rejected.
-- A real local Ollama demonstration extracts the requested tasks; a connection failure is reported without retrying or changing history.
+## R1 — Document retrieval
 
-Status: integrated into CLI on 10 October 2026; the user supplied a successful
-real-model run for this example. Broader manual checks and shared web integration remain pending.
+`R1` `CLI` `web` `owner-C` · [retrieval guide](WEB_DOCUMENT_UPLOAD.md)
 
-Owner: B. First integration target: week 1.
+### R1-1 — Answer from a document
 
-## R1-1 — Answer a question using project documentation
+As a student, I want to ask about a local note, so that the answer uses the material I supplied.
 
-As a developer using Sensai, I want to answer a question using project documentation, so that I can check the basis of the answer.
+- Ingest a supported document into chunks and embeddings.
+- Retrieve relevant chunks for the question.
+- Include those chunks with source references in the generation context.
 
-Acceptance criteria:
-- The scenario "answer a question using project documentation" works through the shared backend with real data, without substituting a mock result.
-- Implement ingestion, chunking, embeddings, local vector storage, top-k retrieval and context injection; source references must identify actual documents.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### R1-2 — Keep indexing failures visible
 
-Owner: C. First integration target: week 2.
+As a user, I want invalid documents rejected clearly, so that I know which material the assistant can actually use.
 
-## R1-2 — Find the relevant part of study material
+- Reject empty, unsupported or invalid UTF-8 uploads.
+- List successfully indexed sources and chunk counts.
+- Report indexing failure instead of claiming the document is available.
 
-As a developer using Sensai, I want to find the relevant part of study material, so that I can avoid reviewing the entire corpus manually.
+## R2 — Advanced retrieval
 
-Acceptance criteria:
-- The scenario "find the relevant part of study material" works through the shared backend with real data, without substituting a mock result.
-- Implement ingestion, chunking, embeddings, local vector storage, top-k retrieval and context injection; source references must identify actual documents.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`R2` `web` `Python API` `owner-C` · [retrieval implementation](../retrieval/rag.py)
 
-Owner: C. First integration target: week 2.
+### R2-1 — Rank useful passages first
 
-## R2-1 — Retrieve information for a selected version only
+As a developer, I want irrelevant matches removed, so that the model receives stronger evidence.
 
-As a developer using Sensai, I want to retrieve information for a selected version only, so that I can avoid mixing incompatible versions.
+- Compare a fixed query set against basic retrieval.
+- Rerank candidates and discard scores below the chosen threshold.
+- Record source rankings and retained relevance scores.
 
-Acceptance criteria:
-- The scenario "retrieve information for a selected version only" works through the shared backend with real data, without substituting a mock result.
-- Implement metadata filtering, reranking and per-chunk relevance scoring with rejection of irrelevant passages; verify these on a fixed query set.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### R2-2 — Restrict the source set
 
-Owner: C. First integration target: week 3.
+As a developer, I want to filter document metadata, so that an answer uses the intended project sources.
 
-## R2-2 — Exclude similar but irrelevant passages
+- Select a supported metadata filter.
+- Exclude nonmatching chunks before final context assembly.
+- Display the active filter and the selected sources for verification.
 
-As a developer using Sensai, I want to exclude similar but irrelevant passages, so that I can base answers on appropriate sources.
+## A1 — Reasoning and action loops
 
-Acceptance criteria:
-- The scenario "exclude similar but irrelevant passages" works through the shared backend with real data, without substituting a mock result.
-- Implement metadata filtering, reranking and per-chunk relevance scoring with rejection of irrelevant passages; verify these on a fixed query set.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`A1` `CLI` `web` `owner-A` · [MCP loop](../mcp_tools/runner.py)
 
-Owner: C. First integration target: week 3.
+### A1-1 — Use an observation to continue
 
-## A1-1 — Break research into actions
+As a developer, I want the assistant to act on tool feedback, so that a multi-step task progresses from actual results.
 
-As a developer using Sensai, I want to break research into actions, so that I can solve tasks requiring several steps.
+- The model chooses a tool action.
+- Return its observation before requesting the next decision.
+- Expose the action sequence and final outcome without fabricating results.
 
-Acceptance criteria:
-- The scenario "break research into actions" works through the shared backend with real data, without substituting a mock result.
-- Bound the action-observation-next-action/final-answer loop by step limits; show brief action rationales, observations and the reason for stopping.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### A1-2 — Bound an unsuccessful loop
 
-Owner: A. First integration target: week 2–3.
+As a user, I want repeated attempts to stop, so that an unsolved task cannot run indefinitely.
 
-## A1-2 — Revise a decision after a tool result
+- Configure a finite action budget.
+- Stop further tool calls when the budget is exhausted.
+- Report the unresolved outcome and preserve the visible action evidence.
 
-As a developer using Sensai, I want to revise a decision after a tool result, so that I can adapt to verifiable observations.
+## A2 — Multiple agents
 
-Acceptance criteria:
-- The scenario "revise a decision after a tool result" works through the shared backend with real data, without substituting a mock result.
-- Bound the action-observation-next-action/final-answer loop by step limits; show brief action rationales, observations and the reason for stopping.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`A2` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
-Owner: A. First integration target: week 2–3.
+### A2-1 — Delegate research and review
 
-## A2-1 — Research and implement a task
+As a developer, I want specialized agents to share a task, so that research, implementation and review have distinct responsibilities.
 
-As a developer using Sensai, I want to research and implement a task, so that I can combine specialized assistance.
+- Assign distinct roles and inputs.
+- Pass one agent's actual output to the next.
+- Show handoffs and identify each contribution.
 
-Acceptance criteria:
-- The scenario "research and implement a task" works through the shared backend with real data, without substituting a mock result.
-- A coordinator delegates research, implementation and review to specialized agents; structured results share a task ID; enforce limits and handle an individual agent failure.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+### A2-2 — Resolve conflicting suggestions
 
-Owner: A. First integration target: week 4.
+As a developer, I want a coordinator to reconcile agent feedback, so that I receive one justified result.
 
-## A2-2 — Obtain an independent implementation review
+- Produce independently attributable suggestions.
+- Expose a disagreement and the coordinator's resolution.
+- Stop on task/time limits and report incomplete work.
 
-As a developer using Sensai, I want to obtain an independent implementation review, so that I can find errors before accepting the result.
+## A3 — Human approval
 
-Acceptance criteria:
-- The scenario "obtain an independent implementation review" works through the shared backend with real data, without substituting a mock result.
-- A coordinator delegates research, implementation and review to specialized agents; structured results share a task ID; enforce limits and handle an individual agent failure.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+`A3` `CLI` `web` `owner-B` · [MCP approvals](MCP.md)
 
-Owner: A. First integration target: week 4.
+### A3-1 — Review before acting
 
-## A3-1 — Approve a file modification
+As a user, I want to see an action before it runs, so that I can decide whether its scope is appropriate.
 
-Current increment: approval applies to creating a new file with `/save`.
-The immutable preview binds the destination and content to a one-use decision.
-Editing existing files and approvals for other tools remain planned.
+- Show the tool arguments or file preview.
+- Wait for explicit approval.
+- Execute only the approved action and report its result.
 
-As a developer using Sensai, I want to approve a file modification, so that I can control changes to my project.
+### A3-2 — Refuse an action
 
-Acceptance criteria:
-- The scenario "approve a file modification" works through the shared backend with real data, without substituting a mock result.
-- Pause before sensitive actions and display the operation and exact arguments; rejection prevents execution; approval is bound to unchanged arguments.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a user, I want to reject or cancel an action, so that an unwanted operation does not execute.
 
-Owner: B. First integration target: week 2.
+- Reject before execution and verify no tool call or file creation.
+- Reject expired or reused web approval IDs.
+- Cancel the turn without saving a successful answer.
 
-## A3-2 — Reject an unwanted action
+## A4 — Prompt versions
 
-Current increment: any confirmation response other than `yes`, EOF or Ctrl+C
-cancels the pending CLI save without creating a file. Approval is not inferred
-from model text and cannot be reused for another path or content.
+`A4` `API` `dashboard` `owner-D` · [version store](../prompts/versioning.py)
 
-As a developer using Sensai, I want to reject an unwanted action, so that I can preserve the original project state.
+### A4-1 — Compare prompt versions
 
-Acceptance criteria:
-- The scenario "reject an unwanted action" works through the shared backend with real data, without substituting a mock result.
-- Pause before sensitive actions and display the operation and exact arguments; rejection prevents execution; approval is bound to unchanged arguments.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a maintainer, I want versioned prompts, so that I can inspect what changed between two configurations.
 
-Owner: B. First integration target: week 2.
+- Store content, author, description and timestamp.
+- Select two versions and display their textual difference.
+- Associate new runs with the active prompt version.
 
-## A4-1 — Compare two prompts
+### A4-2 — Restore a known prompt
 
-As a developer using Sensai, I want to compare two prompts, so that I can choose using measured results.
+As a maintainer, I want to roll back a prompt, so that a poor edit does not affect future conversations.
 
-Acceptance criteria:
-- The scenario "compare two prompts" works through the shared backend with real data, without substituting a mock result.
-- Timestamp and version prompts, compare them and support rollback; compare quality and latency on identical tasks. Git history alone is insufficient.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Activate an earlier stored version.
+- The next request uses that version.
+- Keep newer versions and prior run records for comparison.
 
-Owner: D. First integration target: week 2.
+## A5 — Personas
 
-## A4-2 — Restore previous assistant behavior
+`A5` `CLI` `web` `owner-D` · [persona question set](PERSONA_CHECKS.md)
 
-As a developer using Sensai, I want to restore previous assistant behavior, so that I can recover from a poor prompt change.
+### A5-1 — Switch from tutoring to review
 
-Acceptance criteria:
-- The scenario "restore previous assistant behavior" works through the shared backend with real data, without substituting a mock result.
-- Timestamp and version prompts, compare them and support rollback; compare quality and latency on identical tasks. Git history alone is insufficient.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a student, I want to change the assistant's role, so that I can first learn and then test my understanding.
 
-Owner: D. First integration target: week 2.
+- Use Explainer for an explanation and Reviewer for code feedback.
+- Switch without discarding prior conversation.
+- Check role/tone differences using the fixed persona question set.
 
-## A5-1 — Switch from explanation to review
+### A5-2 — Configure a new persona
 
-As a developer using Sensai, I want to switch from explanation to review, so that I can test my understanding in the same conversation.
+As a maintainer, I want persona settings outside source code, so that I can adapt the assistant for a different teaching style.
 
-Acceptance criteria:
-- The scenario "switch from explanation to review" works through the shared backend with real data, without substituting a mock result.
-- Switch between at least two configurable personas during a session without losing history; define name, tone, role and scope outside source code.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Define name, role, tone and scope in JSON.
+- Reject malformed or duplicate configurations.
+- Select the valid persona and verify its behavior on the same questions.
 
-Owner: D. First integration target: week 1.
+## A6 — Semantic cache
 
-## A5-2 — Customize a persona
+`A6` `shared chat` `owner-C` · [cache tests](../tests/test_semantic_cache.py)
 
-As a developer using Sensai, I want to customize a persona, so that I can receive an appropriate tone and response scope.
+### A6-1 — Reuse a similar answer
 
-Acceptance criteria:
-- The scenario "customize a persona" works through the shared backend with real data, without substituting a mock result.
-- Switch between at least two configurable personas during a session without losing history; define name, tone, role and scope outside source code.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a frequent user, I want repeated independent questions answered from cache, so that I avoid unnecessary generation.
 
-Owner: D. First integration target: week 1.
+- Complete and cache an eligible first question.
+- Ask a sufficiently similar question with compatible model/system context.
+- Observe a cache hit and no new generation call.
 
-## A6-1 — Receive a repeated explanation quickly
+### A6-2 — Avoid reusing incompatible context
 
-As a developer using Sensai, I want to receive a repeated explanation quickly, so that I can reduce waiting time and model load.
+As a user, I want contextual questions to bypass the cache, so that earlier project details cannot be ignored.
 
-Acceptance criteria:
-- The scenario "receive a repeated explanation quickly" works through the shared backend with real data, without substituting a mock result.
-- Serve a semantically similar eligible query without another generation call; partition cache by user, persona, source version and prompt version; implement a threshold, TTL and invalidation.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Start a follow-up or provide context that makes reuse ineligible.
+- Verify the cache is bypassed for that request.
+- Changing model or system context prevents use of the old entry.
 
-Owner: C. First integration target: week 4.
+## A7 — Prompt optimization
 
-## A6-2 — Receive a fresh answer after a source changes
+`A7` `API` `owner-C` · [quality guide](QUALITY.md)
 
-As a developer using Sensai, I want to receive a fresh answer after a source changes, so that I can avoid stale information.
+### A7-1 — Measure a better prompt
 
-Acceptance criteria:
-- The scenario "receive a fresh answer after a source changes" works through the shared backend with real data, without substituting a mock result.
-- Serve a semantically similar eligible query without another generation call; partition cache by user, persona, source version and prompt version; implement a threshold, TTL and invalidation.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a maintainer, I want prompt variants compared against a quality signal, so that changes are supported by evidence.
 
-Owner: C. First integration target: week 4.
+- Generate candidates from a recorded baseline.
+- Score answers on a fixed development set using a stated objective.
+- Save the selected candidate and its score history; do not activate a worse one.
 
-## A7-1 — Select examples suited to the task automatically
+### A7-2 — Check generalization
 
-As a developer using Sensai, I want to select examples suited to the task automatically, so that I can receive more appropriate model behavior.
+As a maintainer, I want an independent evaluation set, so that a higher optimization score is not mistaken for general improvement.
 
-Acceptance criteria:
-- The scenario "select examples suited to the task automatically" works through the shared backend with real data, without substituting a mock result.
-- Automatically select few-shot examples or prompt variants; compare with a baseline on held-out tasks using a quality metric; record the result and prompt version.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Keep test questions out of candidate selection.
+- Compare baseline and selected prompt on those held-out questions.
+- Report failures, quality differences, latency and model/settings.
 
-Owner: C. First integration target: week 4.
+## EV1 — Answer evaluation
 
-## A7-2 — Measure the effect of a prompt improvement
+`EV1` `web` `Python API` `owner-C` · [evaluation guide](EV1_EVALUATION.md)
 
-As a developer using Sensai, I want to measure the effect of a prompt improvement, so that I can avoid adopting unverified changes.
+### EV1-1 — Check source faithfulness
 
-Acceptance criteria:
-- The scenario "measure the effect of a prompt improvement" works through the shared backend with real data, without substituting a mock result.
-- Automatically select few-shot examples or prompt variants; compare with a baseline on held-out tasks using a quality metric; record the result and prompt version.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a student, I want unsupported claims highlighted, so that I know which parts of an answer need checking.
 
-Owner: C. First integration target: week 4.
+- Evaluate a completed answer against its supplied context.
+- Return relevance, coherence and faithfulness scores.
+- Expose unsupported claims or contradictions with an explanation.
 
-## EV1-1 — Compare response quality across versions
+### EV1-2 — Handle judge failure honestly
 
-As a developer using Sensai, I want to compare response quality across versions, so that I can choose using reproducible scores.
+As a user, I want evaluation status separate from the answer, so that a missing judge is not reported as a pass.
 
-Acceptance criteria:
-- The scenario "compare response quality across versions" works through the shared backend with real data, without substituting a mock result.
-- An LLM judge through Ollama scores relevance, coherence and source faithfulness; flag contradictory or unverifiable claims; compare with a small manually labelled set.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Report an explicit skipped or failed evaluation status.
+- Preserve the completed answer if the judge is unavailable.
+- Distinguish a judge score from proof of factual correctness.
 
-Owner: C. First integration target: week 3–4.
+## EV2 — Content and privacy rules
 
-## EV1-2 — Identify an answer contradicting a document
+`EV2` `CLI` `web` `API` `owner-B` · [guardrails](GUARDRAILS.md)
 
-As a developer using Sensai, I want to identify an answer contradicting a document, so that I can avoid treating an unsupported claim as fact.
+### EV2-1 — Block a prohibited request
 
-Acceptance criteria:
-- The scenario "identify an answer contradicting a document" works through the shared backend with real data, without substituting a mock result.
-- An LLM judge through Ollama scores relevance, coherence and source faithfulness; flag contradictory or unverifiable claims; compare with a small manually labelled set.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As an operator, I want input rules applied before generation, so that configured prohibited content is not sent to the model.
 
-Owner: C. First integration target: week 3–4.
+- Load an explicit policy file.
+- Reject a matching request before its model call.
+- Show a clear refusal without saving a completed answer.
 
-## EV2-1 — Prevent a prohibited request from reaching the model
+### EV2-2 — Remove configured personal data
 
-As a developer using Sensai, I want to prevent a prohibited request from reaching the model, so that I can follow the configured usage policy.
+As a user, I want sensitive fields filtered from released output, so that supported personal data is not exposed in the result.
 
-Acceptance criteria:
-- The scenario "prevent a prohibited request from reaching the model" works through the shared backend with real data, without substituting a mock result.
-- Configurable input and output checks block or redact selected categories and PII; apply protection to tools, logs, cache and publication; test allowed and blocked cases.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Buffer and inspect model output when policy is enabled.
+- Redact or refuse matching data before supported display/persistence paths.
+- Validate structured data again after filtering.
 
-Owner: B. First integration target: week 4.
+## EV3 — Run monitoring
 
-## EV2-2 — Redact personal information from a response
+`EV3` `dashboard` `API` `owner-D` · [event store](../events/store.py)
 
-As a developer using Sensai, I want to redact personal information from a response, so that I can avoid disclosing protected categories of data.
+### EV3-1 — Inspect a run
 
-Acceptance criteria:
-- The scenario "redact personal information from a response" works through the shared backend with real data, without substituting a mock result.
-- Configurable input and output checks block or redact selected categories and PII; apply protection to tools, logs, cache and publication; test allowed and blocked cases.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a maintainer, I want to inspect one request, so that I can explain its tools, output and failure state.
 
-Owner: B. First integration target: week 4.
+- Identify events by run ID and order.
+- Display tool calls/results, completion status and timing.
+- Inspect the exact assembled prompt and selected chunks for that turn.
 
-## EV3-1 — Find the cause of a failure
+### EV3-2 — Compare operational behavior
 
-As a developer using Sensai, I want to find the cause of a failure, so that I can reproduce the problematic run.
+As a maintainer, I want a metrics view, so that I can spot changes in latency or failure rate.
 
-Acceptance criteria:
-- The scenario "find the cause of a failure" works through the shared backend with real data, without substituting a mock result.
-- Store sanitized prompts, responses, tool calls, latency, tokens and errors with session/run/version IDs; show volume, latency, error rates and changes over time on a dashboard.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Aggregate completed, failed and cancelled runs.
+- Compare runs associated with prompt versions.
+- Distinguish measured token counts from estimates and missing values.
 
-Owner: D. First integration target: week 1–4.
+## EV4 — Adversarial testing
 
-## EV3-2 — Detect deterioration after a prompt change
+`EV4` `test suite` `reports` `owner-C` · [attack report](ev4_adversarial_testing.md)
 
-As a developer using Sensai, I want to detect deterioration after a prompt change, so that I can identify quality or performance regressions.
+### EV4-1 — Probe malicious source text
 
-Acceptance criteria:
-- The scenario "detect deterioration after a prompt change" works through the shared backend with real data, without substituting a mock result.
-- Store sanitized prompts, responses, tool calls, latency, tokens and errors with session/run/version IDs; show volume, latency, error rates and changes over time on a dashboard.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a maintainer, I want injection cases tested, so that I understand how retrieved content can redirect the assistant.
 
-Owner: D. First integration target: week 1–4.
+- Run named attacks with recorded model/settings.
+- Capture actual responses and the source context.
+- Classify successes, partial failures and failures against explicit criteria.
 
-## EV4-1 — Test malicious instructions in a document
+### EV4-2 — Compare a mitigation
 
-As a developer using Sensai, I want to test malicious instructions in a document, so that I can discover attempts to bypass rules through sources.
+As a maintainer, I want before/after attack results, so that I can judge whether a defense helped.
 
-Acceptance criteria:
-- The scenario "test malicious instructions in a document" works through the shared backend with real data, without substituting a mock result.
-- Maintain a reproducible suite covering jailbreaks, prompt injections and malformed inputs; report successful defenses, failures and repairs explicitly.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Use the same attack set for both variants.
+- Retain raw results and explain changed classifications.
+- Report regressions as well as improvements.
 
-Owner: C. First integration target: week 1–5.
+## X1 — Browser interface
 
-## EV4-2 — Test malformed tool output
+`X1` `web` `owner-D` · [web service](../web/app.py)
 
-As a developer using Sensai, I want to test malformed tool output, so that I can check robustness against invalid data.
+### X1-1 — Work from a browser
 
-Acceptance criteria:
-- The scenario "test malformed tool output" works through the shared backend with real data, without substituting a mock result.
-- Maintain a reproducible suite covering jailbreaks, prompt injections and malformed inputs; report successful defenses, failures and repairs explicitly.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a student, I want a browser chat, so that I can use Sensai without terminal commands for each question.
 
-Owner: C. First integration target: week 1–5.
+- Select a real mode, model and persona.
+- Send a question and display its result or explicit error.
+- Retain completed history and show active run status.
 
-## X1-1 — Chat in a browser
+### X1-2 — Control a tool action
 
-As a developer using Sensai, I want to chat in a browser, so that I can work without a terminal.
+As a user, I want visible tool controls, so that I can inspect and control model actions.
 
-Acceptance criteria:
-- The scenario "chat in a browser" works through the shared backend with real data, without substituting a mock result.
-- A decoupled frontend uses the same backend as the CLI; provide streaming chat, token/context usage, agent selection and configuration; expose errors and cancellation.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Show the proposed arguments and approval card.
+- Approve or reject using the matching run/action ID.
+- Display actual results and allow cancellation while the run is active.
 
-Owner: D. First integration target: week 1–3.
+## X2 — Branching and interruption
 
-## X1-2 — Change settings and monitor the budget
+`X2` `web` `CLI` `owner-A` · [web run control](../web/app.py)
 
-As a developer using Sensai, I want to change settings and monitor the budget, so that I can understand the limits of the current request.
+### X2-1 — Explore an alternative message
 
-Acceptance criteria:
-- The scenario "change settings and monitor the budget" works through the shared backend with real data, without substituting a mock result.
-- A decoupled frontend uses the same backend as the CLI; provide streaming chat, token/context usage, agent selection and configuration; expose errors and cancellation.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a student, I want to edit an earlier question into a branch, so that I can compare different approaches without losing the original.
 
-Owner: D. First integration target: week 1–3.
+- Select a past user message.
+- Create a distinct branch with the edited message.
+- Switch between branches and preserve their separate histories.
 
-## X2-1 — Compare two versions of a question
+### X2-2 — Stop and redirect a response
 
-As a developer using Sensai, I want to compare two versions of a question, so that I can preserve both conversation alternatives.
+As a user, I want to interrupt a run, so that I can change direction without waiting for it to finish.
 
-Acceptance criteria:
-- The scenario "compare two versions of a question" works through the shared backend with real data, without substituting a mock result.
-- Editing a previous message creates a new branch while preserving the original; cancellation stops the active run and allows immediate redirection.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Cancel an active generation or tool wait.
+- Do not persist the incomplete turn as a successful answer.
+- Accept a new instruction and continue normally.
 
-Owner: A. First integration target: week 4.
+## X3 — Export and sharing
 
-## X2-2 — Stop a response and redirect it
+`X3` `web` `API` `owner-D` · [export service](../export/service.py)
 
-As a developer using Sensai, I want to stop a response and redirect it, so that I can avoid waiting for unwanted generation.
+### X3-1 — Download a deliverable
 
-Acceptance criteria:
-- The scenario "stop a response and redirect it" works through the shared backend with real data, without substituting a mock result.
-- Editing a previous message creates a new branch while preserving the original; cancellation stops the active run and allows immediate redirection.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a student, I want exportable results, so that I can use them in a report outside Sensai.
 
-Owner: A. First integration target: week 4.
+- Select a conversation snapshot or artifact.
+- Export the supported JSON, Markdown or PDF representation.
+- Preserve selected content while excluding unrelated session data.
 
-## X3-1 — Download a result for a report
+### X3-2 — Share outside the machine
 
-As a developer using Sensai, I want to download a result for a report, so that I can use the output outside the application.
+As a team member, I want a public snapshot link, so that a reviewer can read the result without access to my working session.
 
-Acceptance criteria:
-- The scenario "download a result for a report" works through the shared backend with real data, without substituting a mock result.
-- Export conversations and artifacts to JSON, Markdown and PDF; expose a selected snapshot through a real public no-auth URL; exclude internal logs and other sessions.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Publish only the selected snapshot.
+- Open its URL on another machine without signing in.
+- Keep other conversations, private records and internal logs inaccessible.
 
-Owner: D. First integration target: week 4.
+## X4 — Questions and forms
 
-## X3-2 — Share a selected result through a link
+`X4` `API` `owner-D` · [form validation](../forms/service.py)
 
-As a developer using Sensai, I want to share a selected result through a link, so that I can show it without exposing the working session.
+### X4-1 — Clarify a missing requirement
 
-Acceptance criteria:
-- The scenario "share a selected result through a link" works through the shared backend with real data, without substituting a mock result.
-- Export conversations and artifacts to JSON, Markdown and PDF; expose a selected snapshot through a real public no-auth URL; exclude internal logs and other sessions.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a developer, I want a focused clarification form, so that I can supply required details before execution.
 
-Owner: D. First integration target: week 4.
+- The model produces a supported form schema.
+- Render the requested fields and validate the answers.
+- Return validated answers to the waiting model run.
 
-## X4-1 — Clarify requirements through a form
+### X4-2 — Recover from invalid input
 
-As a developer using Sensai, I want to clarify requirements through a form, so that I can provide all required parameters.
+As a user, I want field-level feedback, so that I can correct a form without restarting the task.
 
-Acceptance criteria:
-- The scenario "clarify requirements through a form" works through the shared backend with real data, without substituting a mock result.
-- The model emits a schema-defined question or form; the UI renders fields, validates answers and returns them to the same run; provide a CLI text equivalent.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+- Reject answers that violate the declared schema.
+- Preserve valid answers and display what needs fixing.
+- Resume the same run only after valid submission, or cancel it explicitly.
 
-Owner: D. First integration target: week 3.
+## X5 — Scheduling
 
-## X4-2 — Select task constraints without a long exchange
+`X5` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
-As a developer using Sensai, I want to select task constraints without a long exchange, so that I can clarify the request and resume execution quickly.
+### X5-1 — Schedule a project summary
 
-Acceptance criteria:
-- The scenario "select task constraints without a long exchange" works through the shared backend with real data, without substituting a mock result.
-- The model emits a schema-defined question or form; the UI renders fields, validates answers and returns them to the same run; provide a CLI text equivalent.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
+As a developer, I want recurring summaries, so that I can review changes without starting each request manually.
 
-Owner: D. First integration target: week 3.
+- Save a task, interval and timezone.
+- Execute it at the scheduled time and expose the result or error.
+- Prevent overlapping executions of the same job.
 
-## X5-1 — Receive a daily summary
+### X5-2 — Manage a recurring task
 
-As a developer using Sensai, I want to receive a daily summary, so that I can avoid starting a repetitive task manually.
+As a user, I want to disable and resume scheduled work, so that it runs only when useful.
 
-Acceptance criteria:
-- The scenario "receive a daily summary" works through the shared backend with real data, without substituting a mock result.
-- Persist and run interval-based tasks with an explicit timezone; expose results/errors and disabling; prevent overlapping runs and restore jobs after restart.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
-
-Owner: A. First integration target: week 4.
-
-## X5-2 — Run a periodic project check
-
-As a developer using Sensai, I want to run a periodic project check, so that I can receive scheduled results on time.
-
-Acceptance criteria:
-- The scenario "run a periodic project check" works through the shared backend with real data, without substituting a mock result.
-- Persist and run interval-based tasks with an explicit timezone; expose results/errors and disabling; prevent overlapping runs and restore jobs after restart.
-- The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
-
-Owner: A. First integration target: week 4.
-
+- Persist enabled/disabled state.
+- Restore schedules correctly after restart.
+- Show the next run and recent outcomes without duplicating jobs.

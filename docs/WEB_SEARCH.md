@@ -1,4 +1,4 @@
-# T3: live web search (member B)
+# Live web search
 
 `/search <query>` performs a real SearXNG query, prints source titles/URLs,
 and asks the selected Ollama model to answer with the returned snippets.

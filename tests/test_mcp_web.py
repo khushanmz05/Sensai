@@ -50,7 +50,7 @@ class McpWebTests(unittest.IsolatedAsyncioTestCase):
                             'store': self.events, 'prompts': prompts, 'vector_store': vectors,
                             'workspace_writer': None, 'mcp_servers': self.servers[:1]}.items():
             self.stack.enter_context(patch.object(self.web.app.state, name, value))
-        self.stack.enter_context(patch('core.chat.retrieve', return_value=[]))
+        self.stack.enter_context(patch('core.chat.retrieve_advanced', return_value=[]))
         from mcp_tools import runner
         original = runner.tool_loop
         self.model = AsyncMock()
@@ -125,6 +125,21 @@ class McpWebTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.sessions.list_sessions())
         self.model.assert_not_called()
 
+    async def test_clear_before_first_message_is_idempotent_and_scoped(self):
+        for _ in range(2):
+            status, body = await self.request('POST', '/api/sessions/not-created-yet/clear')
+            self.assertEqual(status, 200, body)
+            self.assertEqual(json.loads(body)['status'], 'cleared')
+        self.assertFalse(self.sessions.list_sessions())
+        for session_id in ('clear-target', 'keep-other'):
+            self.sessions.create_session(session_id=session_id, persona_id='explainer')
+            self.sessions.add_message(session_id, 'user', 'Keep my project context')
+        self.assertEqual((await self.request('POST', '/api/sessions/clear-target/clear'))[0], 200)
+        self.assertFalse(self.sessions.get_messages('clear-target'))
+        self.assertEqual(self.sessions.get_session_persona('clear-target'), 'explainer')
+        self.assertEqual(len(self.sessions.get_messages('keep-other')), 1)
+        self.model.assert_not_called()
+
     async def test_discovery_lists_real_tools_without_model_call(self):
         self.web.app.state.mcp_servers = self.servers
         status, body = await self.request('GET', '/api/mcp/tools')
@@ -159,6 +174,54 @@ class McpWebTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e['type'] == 'tool_call' for e in events))
         self.assertIn('MCP action rejected', json.dumps(events))
         self.assertFalse(self.sessions.get_messages(run['session_id']))
+
+    async def test_python_error_then_repair_uses_real_sandbox_and_two_web_approvals(self):
+        from sandbox.runner import bubblewrap, SandboxError
+        try:
+            bubblewrap()
+        except SandboxError:
+            self.skipTest('Install sandbox dependencies on Linux/WSL')
+        self.web.app.state.mcp_servers = load_config(ROOT / 'configs/mcp.sandbox.json')
+        self.model.side_effect = [
+            self.call('python__execute_python', {'code': 'print(1/0)'}),
+            self.call('python__execute_python', {'code': 'print(6*7)'}),
+            {'role': 'assistant', 'content': 'Corrected result: 42'},
+        ]
+        run = await self.start(message='Execute Python and correct the error')
+        task, queue = await self.stream(run)
+        for expected in ('print(1/0)', 'print(6*7)'):
+            approval = await self.next_event(queue, 'approval_request')
+            self.assertEqual(approval['arguments']['code'], expected)
+            self.assertEqual((await self.decision(run, approval))[0], 200)
+        await asyncio.wait_for(task, 10)
+        results = [e['payload']['result'] for e in self.events.get_events(run['run_id'])
+                   if e['type'] == 'tool_result']
+        self.assertTrue(results[0]['isError'])
+        self.assertIn('ZeroDivisionError', results[0]['structuredContent']['stderr'])
+        self.assertEqual(results[1]['structuredContent']['stdout'], '42\n')
+        self.assertFalse(results[1]['isError'])
+        self.assertIn('ZeroDivisionError', str(self.model.call_args_list[1]))
+        self.assertEqual(self.sessions.get_messages(run['session_id'])[-1]['content'], 'Corrected result: 42')
+
+    async def test_stop_during_real_python_execution_discards_turn(self):
+        from sandbox.runner import bubblewrap, SandboxError
+        try:
+            bubblewrap()
+        except SandboxError:
+            self.skipTest('Install sandbox dependencies on Linux/WSL')
+        self.web.app.state.mcp_servers = load_config(ROOT / 'configs/mcp.sandbox.json')
+        self.model.side_effect = [self.call('python__execute_python', {'code': 'import time; time.sleep(30)'})]
+        run = await self.start(message='Run Python')
+        task, queue = await self.stream(run)
+        approval = await self.next_event(queue, 'approval_request')
+        self.assertEqual((await self.decision(run, approval))[0], 200)
+        await self.next_event(queue, 'tool_call')
+        await asyncio.sleep(.2)
+        self.assertEqual((await self.request('POST', '/api/runs/' + run['run_id'] + '/cancel'))[0], 200)
+        await asyncio.wait_for(task, 3)
+        self.assertEqual(self.model.await_count, 1)
+        self.assertFalse(self.sessions.get_messages(run['session_id']))
+        self.assertEqual(self.events.get_run(run['run_id'])['status'], 'cancelled')
 
     async def test_cross_run_and_replayed_approvals_are_rejected(self):
         self.model.side_effect = None

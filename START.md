@@ -1,10 +1,11 @@
 # Install and run Sensai, step by step
 
-This guide takes you from a fresh computer to your first answer in the terminal.
+This guide takes you from a fresh computer to your first answer in the terminal and browser.
 Use **Ubuntu 24.04 LTS**, either directly on Linux or inside **WSL 2 on Windows**.
 The CLI file features require Linux/WSL. This guide starts the terminal application;
 the [web search guide](docs/WEB_SEARCH.md) explains the browser and a local provider
-without Docker.
+without Docker. For running generated Python with error correction (T2), use
+the [sandbox setup guide](docs/SANDBOX.md) after completing the basic installation.
 
 You need an internet connection for installation, permission to install software,
 and access to this repository or a project ZIP supplied by the team. Allow several
@@ -174,11 +175,11 @@ URL again: a server may already be running on that port.
 In your **first Ubuntu terminal**:
 
 ```bash
-ollama pull llama3.2:1b
+ollama pull qwen3:0.6b
 ollama list
 ```
 
-Wait for the download to finish. Expected: `llama3.2:1b` appears in the model list.
+Wait for the download to finish. Expected: `qwen3:0.6b` appears in the model list.
 You only need to download it once. This small model is used for our demonstrations;
 its answers can be inaccurate, repetitive or mix languages.
 
@@ -187,15 +188,10 @@ its answers can be inaccurate, repetitive or mix languages.
 In the **first Ubuntu terminal**, with `(.venv)` active and inside the project:
 
 ```bash
-python chatbot.py --model llama3.2:1b
+python chatbot.py --model qwen3:0.6b
 ```
 
-Expected:
-
-```text
-Sensai | model: llama3.2:1b | persona: none | /exit to quit, /clear to reset, /persona to switch
-You>
-```
+Expected: a Sensai banner showing `qwen3:0.6b`, session information and a `You>` prompt.
 
 At `You>`, type this question and press Enter:
 
@@ -217,17 +213,47 @@ To leave the chat, enter:
 You should return to the Ubuntu prompt with `(.venv)`. Run installation, test and
 Git commands there, never at `You>`.
 
-## 8. Check the installation with automated tests
+## 8. Open the browser interface
 
-After leaving the chat, run in the project folder with `(.venv)` active:
+Leave the CLI with `/exit`. In the same Ubuntu terminal, with `(.venv)` active:
 
 ```bash
-python -m unittest discover -s tests -v
+export SENSAI_MODEL=qwen3:0.6b
+python -m uvicorn web.app:app --host 127.0.0.1 --port 8000
 ```
 
-Expected for this revision: `Ran 97 tests` followed by `OK`. The count may grow as
-features are added. These tests use a simulated API and do not require Ollama;
-step 7 separately checks the real model connection.
+Leave this terminal open. Expected: a message saying Uvicorn is running on
+`http://127.0.0.1:8000`. In your browser, open that address. Select **Mode → Ollama**,
+check the model name, and send `Explain Python functions in two sentences.`
+
+The top navigation opens **Structured workspace** and **Dashboard**. MCP and web
+search need the optional setup linked below; selecting their mode alone does not
+start the required services. Click **Clear** to clear the current web conversation.
+This removes its messages; the CLI's `/clear` instead starts a new saved session.
+
+To stop the web server, return to its terminal and press **Ctrl+C**. Restart it
+after changing environment variables or code. A normal page refresh is enough
+after starting the updated server.
+
+## 9. Check the installation with automated tests
+
+Use a separate Ubuntu terminal, or stop the web server first. Inside the project:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements-mcp.txt
+python -m pip install pytest
+python -m pytest tests -q
+```
+
+For the real sandbox checks, also install the Linux dependencies and run its
+smoke check as described in [SANDBOX.md](docs/SANDBOX.md). Without them those
+checks can be skipped; a skip is not a successful execution test.
+
+Expected: the test run finishes without failures. The count changes as features
+are added, so use [the verification record](docs/VERIFY.md) for dated results.
+Most automated tests use controlled model responses; they do not establish real
+model quality. Steps 7 and 8 separately check your running model connection.
 
 ## Start again tomorrow
 
@@ -244,25 +270,29 @@ If the last command fails, start `ollama serve` in another Ubuntu terminal as in
 step 5. Once Ollama responds, run in the first terminal:
 
 ```bash
-python chatbot.py --model llama3.2:1b
+python chatbot.py --model qwen3:0.6b
 ```
 
 Use `/exit` to close Sensai. Optionally run `deactivate` afterward to leave the
 Python environment. If you started `ollama serve` manually, Ctrl+C in its terminal
 stops that server when you are finished.
 
-## Try the implemented features
+## Choose your next workflow
 
-After completing setup, use the examples in the README:
+| Task | Guide |
+| --- | --- |
+| Resume sessions and change preferences | [Daily use](docs/CONFIGURATION.md) |
+| Upload notes and ask questions about them | [Document retrieval](docs/WEB_DOCUMENT_UPLOAD.md) |
+| Extract tasks, save progress and export JSON | [Structured workspace](docs/STRUCTURED_WORKSPACE.md) |
+| Read files and save approved answers | [File access](docs/FILE_ACCESS.md) |
+| Use project and time tools | [MCP setup](docs/MCP.md) |
+| Execute and repair Python examples | [Sandbox setup](docs/SANDBOX.md) |
+| Search current web sources | [Search setup](docs/WEB_SEARCH.md) |
+| Test privacy/content filtering | [Guardrails](docs/GUARDRAILS.md) |
 
-- [Structured JSON output](README.md#structured-json-output-t5-member-b).
-- [Read a project file](README.md#read-a-project-file-t4-first-increment-linuxwsl).
-- [Save an answer with confirmation](README.md#save-an-answer-after-confirmation-t4--initial-a3).
-- [MCP tools: optional setup and two server demonstrations](docs/MCP.md), including
-  [browser launch, Approve/Reject and Stop](docs/MCP.md#web-chat-step-by-step).
-
-Exit each chat with `/exit` before starting the next example. For the full manual
-checklist and recorded verification, see [docs/VERIFY.md](docs/VERIFY.md).
+Optional setup is intentionally separate: basic chat does not require SearXNG,
+MCP servers, a sandbox or an embedding model. Exit each CLI session with `/exit`
+before entering shell commands. For the complete map, open [Documentation](docs/README.md).
 
 ## Troubleshooting
 
@@ -277,15 +307,26 @@ checklist and recorded verification, see [docs/VERIFY.md](docs/VERIFY.md).
 | `ollama: command not found` | Complete step 5 inside Ubuntu. A Windows Ollama installation is separate from the Ubuntu installation used here. |
 | `Connection failed or was interrupted` | Enter `/exit`, check `curl http://localhost:11434`, and follow step 5 if it fails. If the service responds, inspect its terminal output and retry the chat. |
 | `address already in use` from `ollama serve` | Run `curl http://localhost:11434` in the first terminal. If it says `Ollama is running`, use that server; do not start another one. |
-| Model not found | Leave Sensai with `/exit`, run `ollama pull llama3.2:1b`, and start Sensai again with the same model name. |
-| A response times out | After confirming Ollama is running and the model is installed, exit and retry with `python chatbot.py --model llama3.2:1b --timeout 240`. This increases the wait between response chunks. |
+| Model not found | Leave Sensai with `/exit`, run `ollama pull qwen3:0.6b`, and start Sensai again with the same model name. |
+| A response times out | After confirming Ollama is running and the model is installed, exit and retry with `python chatbot.py --model qwen3:0.6b --timeout 240`. This increases the wait between response chunks. |
 | `Empty input: enter a message.` | You pressed Enter without a question. Type a question or `/exit`. |
-| `/read` or `/save` is unavailable | Start Sensai with the flags shown in the linked file-feature examples. `/save` also needs `--allow-create`. |
+| `/read` or `/save` is unavailable | Follow [File access](docs/FILE_ACCESS.md). `/read` requires `--workspace`; `/save` also requires `--allow-create`. |
 | `Target already exists; overwriting is not allowed.` | Choose a new filename for `/save`; the app intentionally never overwrites an existing file. |
 
 If you are still stuck, send the team the command you ran and the full error text,
 plus your Ubuntu version (`cat /etc/os-release`) and Python version
 (`python3 --version`). Do not include passwords or access tokens.
+
+## More troubleshooting
+
+| What you see | What to do |
+| --- | --- |
+| Browser page does not open | Keep Uvicorn running and check its terminal for errors. Open the exact localhost URL it prints. |
+| Port 8000 is already in use | Use the terminal running your old Sensai server to stop it with Ctrl+C, then restart. |
+| MCP or search is disabled | Configure the corresponding service using its guide, then restart Uvicorn. |
+| Documents disappear after restarting | The current web document index is in memory. Upload the files again; saved chat history is separate. |
+| `nomic-embed-text` is missing | Run `ollama pull nomic-embed-text` before document retrieval. |
+| Sandbox installation/check fails | Follow [Sandbox setup](docs/SANDBOX.md). Generated code must never be run on the host as a workaround. |
 
 ## Verification scope
 

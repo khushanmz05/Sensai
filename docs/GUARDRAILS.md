@@ -1,6 +1,6 @@
 # EV2: configurable content and privacy checks
 
-Owner: member B (Mark Charadnik). A deterministic policy intercepts inputs and
+A deterministic policy intercepts inputs and
 outputs in CLI chat, web chat, and structured generation. Input checks run before
 model calls; output checks run before display and persistence. The same policy
 also protects new web artifact content, publication and model-bound RAG context.
@@ -84,10 +84,9 @@ test files use pytest, which must be installed separately for full suite collect
 The full repository also contains pytest-style tests that unittest does not execute;
 run `python3 -m pytest tests` when pytest is available.
 
-Local Windows verification on 2026-10-21: five dependency-free policy tests passed.
-Integration tests and full regression execution are pending in WSL: the available
-Windows interpreter lacked requests/jsonschema, and dependency downloads were denied.
-Real-model checks are pending. Do not report those checks as passed.
+See [verification evidence](VERIFY.md) for the recorded WSL regression results
+and [the browser walkthrough](EV2_WEB_VERIFY.md) for manual checks. Automated
+policy tests do not establish resistance to every real-model prompt or bypass.
 
 ## Web coverage and limits
 
