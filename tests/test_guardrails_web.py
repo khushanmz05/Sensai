@@ -64,7 +64,7 @@ class WebGuardrailTests(unittest.TestCase):
                             'workspace_writer': None,
                             'structured_store': ResultStore(Path(self.directory.name) / 'results.db')}.items():
             self.stack.enter_context(patch.object(state, name, value))
-        self.retrieve = self.stack.enter_context(patch('core.chat.retrieve', return_value=[]))
+        self.retrieve = self.stack.enter_context(patch('core.chat.retrieve_advanced', return_value=[]))
         self.stack.enter_context(patch.object(settings, 'check_ollama_alive', return_value=True))
 
     async def async_request(self, method, path, payload=None):
@@ -223,7 +223,11 @@ class WebGuardrailTests(unittest.TestCase):
     def test_disabled_policy_preserves_streaming(self):
         self.web.app.state.guardrails = None
         run = self.start('a@example.com')
-        with patch('core.chat.stream_reply', return_value=iter(['a@', 'example.com'])):
+        cache = Mock()
+        cache.get.return_value = (None, 0.0, [1.0, 0.0])
+        with patch('core.chat.get_semantic_cache', return_value=cache), patch(
+            'core.chat.stream_reply', return_value=iter(['a@', 'example.com'])
+        ):
             events = self.consume(run)
         self.assertEqual([e['payload']['text'] for e in events if e['type'] == 'text_delta'], ['a@', 'example.com'])
 
@@ -274,7 +278,6 @@ class WebGuardrailTests(unittest.TestCase):
         self.assertNotIn('text_delta', body)
         self.assertIn('cancelled', body)
         self.assertEqual(self.sessions.get_messages(self.start_result['session_id']), [])
-
 
 if __name__ == '__main__':
     unittest.main()

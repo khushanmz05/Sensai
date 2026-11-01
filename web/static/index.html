@@ -191,6 +191,22 @@
     .swatch[aria-pressed="true"] { border-color: var(--line-strong); background: var(--raise); color: var(--ink); }
     .swatch[aria-pressed="true"] i { box-shadow: 0 0 0 2px var(--panel-solid), 0 0 0 4px var(--sw); }
 
+    .documents-panel { border-bottom: 1px solid var(--line); background: var(--panel); }
+    .documents-panel[hidden] { display: none; }
+    .documents-panel .wrap { padding-block: .8rem 1rem; }
+    .documents-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .65rem; }
+    .documents-head h2 { margin: 0; font-size: .95rem; font-weight: 650; }
+    .documents-head p { margin: 0; color: var(--ink-3); font-size: .8rem; }
+    .document-upload { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; }
+    .document-upload input[type=file] { max-width: 100%; color: var(--ink-2); font: .82rem var(--sans); }
+    .document-upload button { min-height: 36px; padding: 0 .9rem; border: 1px solid var(--acc-edge); border-radius: 10px; background: var(--acc-wash); color: var(--ink); font: 600 .82rem var(--sans); cursor: pointer; }
+    .document-upload button:disabled { opacity: .55; cursor: wait; }
+    #document-upload-status { color: var(--ink-2); font-size: .82rem; }
+    #document-upload-status[data-kind="error"] { color: var(--bad); }
+    #document-upload-status[data-kind="success"] { color: var(--ok); }
+    .document-sources { margin: .6rem 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .4rem; }
+    .document-sources li { border: 1px solid var(--line); border-radius: 8px; padding: .25rem .55rem; color: var(--ink-2); font-size: .78rem; }
+    .document-sources:empty { display: none; }
     /* ---------- Toolbar ---------- */
     .toolbar { position: relative; z-index: 10; }
     .toolbar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding-block: .75rem; }
@@ -508,12 +524,29 @@
       </label>
       <span class="grow"></span>
       <button id="mcp-tools" class="btn" type="button" disabled>MCP tools</button>
+      <button id="documents-btn" class="btn" type="button" aria-expanded="false" aria-controls="documents-panel">Documents</button>
       <button id="share-btn" class="btn" type="button" title="Publish a public snapshot of this chat">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 10V2M5 5l3-3 3 3M3 9v4h10V9"/></svg><span class="hide-sm">Share</span>
       </button>
       <button id="clear-btn" class="btn" type="button" title="Clear the conversation">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4"/></svg><span class="hide-sm">Clear</span>
       </button>
+    </div>
+  </section>
+
+  <section id="documents-panel" class="documents-panel" aria-label="Knowledge base documents" hidden>
+    <div class="wrap">
+      <div class="documents-head">
+        <h2>Knowledge base</h2>
+        <p>Upload UTF-8 .txt or .md files (up to 5 MB) to make them available to RAG.</p>
+      </div>
+      <form id="document-upload-form" class="document-upload">
+        <label for="document-file">Choose a document</label>
+        <input id="document-file" name="file" type="file" accept=".txt,.md,text/plain,text/markdown" required>
+        <button id="document-upload-btn" type="submit">Upload and index</button>
+        <span id="document-upload-status" role="status" aria-live="polite">No upload yet.</span>
+      </form>
+      <ul id="document-sources" class="document-sources" aria-label="Indexed documents"></ul>
     </div>
   </section>
 
@@ -554,6 +587,72 @@
     }).catch(() => {
       document.getElementById('policy-status').textContent = 'Content policy status unavailable';
     });
+    /* ---------- Knowledge base document upload ---------- */
+    (function () {
+      const toggle = document.getElementById('documents-btn');
+      const panel = document.getElementById('documents-panel');
+      const form = document.getElementById('document-upload-form');
+      const picker = document.getElementById('document-file');
+      const submit = document.getElementById('document-upload-btn');
+      const status = document.getElementById('document-upload-status');
+      const sources = document.getElementById('document-sources');
+
+      function setUploadStatus(message, kind = '') {
+        status.textContent = message;
+        status.dataset.kind = kind;
+      }
+
+      async function refreshSources() {
+        try {
+          const response = await fetch('/api/retrieval/sources');
+          if (!response.ok) throw new Error('Could not load indexed documents.');
+          const rows = await response.json();
+          sources.replaceChildren();
+          rows.forEach((source) => {
+            const item = document.createElement('li');
+            item.textContent = `${source.source_file} · ${source.chunks_count} chunk(s)`;
+            sources.appendChild(item);
+          });
+        } catch (error) {
+          setUploadStatus(error.message, 'error');
+        }
+      }
+
+      toggle.addEventListener('click', () => {
+        const opening = panel.hidden;
+        panel.hidden = !opening;
+        toggle.setAttribute('aria-expanded', String(opening));
+        if (opening) refreshSources();
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const file = picker.files && picker.files[0];
+        if (!file) {
+          setUploadStatus('Choose a .txt or .md file first.', 'error');
+          return;
+        }
+        submit.disabled = true;
+        setUploadStatus(`Uploading ${file.name}…`);
+        try {
+          const data = new FormData();
+          data.append('file', file);
+          const response = await fetch('/api/retrieval/upload', { method: 'POST', body: data });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(typeof result.detail === 'string' ? result.detail : 'Upload failed.');
+          }
+          setUploadStatus(result.message || `Indexed ${result.filename}.`, 'success');
+          picker.value = '';
+          await refreshSources();
+        } catch (error) {
+          setUploadStatus(error.message || 'Upload failed.', 'error');
+        } finally {
+          submit.disabled = false;
+        }
+      });
+    })();
+
     /* ---------- Appearance settings ---------- */
     (function () {
       const root = document.documentElement;
@@ -1192,6 +1291,28 @@
         const m = JSON.parse(e.data).payload;
         sessionTotalTokens += (m.tokens || 0);
         setUsage(m.tokens || 0, sessionTotalTokens);
+      });
+
+      currentSource.addEventListener('evaluation', (e) => {
+        const result = JSON.parse(e.data).payload;
+        if (result.status === 'completed') {
+          const relevance = Math.round(result.relevance * 100);
+          const coherence = Math.round(result.coherence * 100);
+          const faithfulness = Math.round(result.faithfulness * 100);
+          const label = result.hallucination_detected
+            ? 'Evaluation flagged ' + result.unsupported_claims.length +
+              ' unsupported claim(s)'
+            : 'Evaluation complete';
+          const scores = 'relevance ' + relevance + '% · coherence ' +
+            coherence + '% · source faithfulness ' + faithfulness + '%';
+          setStatus('Run ' + runId.slice(0, 8) + ' · ' + label + ' · ' + scores,
+            result.hallucination_detected ? 'fail' : '');
+        } else if (result.status === 'failed') {
+          setStatus('Run ' + runId.slice(0, 8) + ' · evaluation unavailable', '');
+        } else if (result.status === 'skipped') {
+          setStatus('Run ' + runId.slice(0, 8) + ' · evaluation skipped (' +
+            (result.reason || 'not applicable') + ')', '');
+        }
       });
 
       currentSource.addEventListener('done', (e) => {
