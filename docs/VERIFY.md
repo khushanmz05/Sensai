@@ -1,5 +1,95 @@
 # Verification
 
+## T3 CLI and web: 29 October 2026
+
+Branch `b-t3-search`, based on main `dc16e46`: **320 tests and 148 subtests**
+passed in 37.05 seconds, no skips, one existing Pydantic warning. Eleven new tests
+cover async HTTP errors/limits/deadline/cancellation, web sources/privacy/history,
+local notes without sending them to search engines, empty/failed searches, and
+Stop/disconnect at provider/model boundaries. These use controlled transports.
+
+Real SearXNG revision `cff884f98b1141bb6d5d3f104094fddafba78ef1` ran in a separate
+WSL Python environment. Queries returned official TaskGroup, SQLite and logging
+documentation. Real `qwen3:0.6b` used a local note and SQLite web results, then
+answered Python/SQLite with source URLs in a follow-up. Browser checks displayed
+clickable sources and answers, a real error after stopping the provider, and
+recovery after restarting it. Pressing Stop during a live browser search also
+reached `Run cancelled`. The final config selects Brave, DuckDuckGo and
+Google CSE. Some queries reported partial engine failures. Docker was unavailable.
+
+Source delivery does not establish answer accuracy: the small model produced
+inaccurate technical claims in browser answers. No universal citation checking,
+full-page reading or prompt-injection guarantee is claimed. See WEB_SEARCH.md.
+
+## T1 MCP: 29 October 2026
+
+Web follow-up: the full suite passed **309 tests and 132 subtests** in 37.06
+seconds, with no skips and the same existing Pydantic warning. Ten additional
+ASGI/SSE tests use isolated databases, real stdio project/Time servers and
+deterministic model messages. They cover disabled/incompatible modes, discovery,
+approval and persisted observations, rejection, duplicate/cross-run approvals,
+120-second approval expiry (shortened in the test), Stop during approval and
+model requests, event-stream disconnect cleanup, automatic Time calls, redaction
+and blocked final answers.
+
+Browser checks with the real `qwen3:0.6b` and EV2 enabled passed project-file
+approval → real result → Python/SQLite answer, and an explicit
+`time__get_current_time` request → matching Madrid timestamp. A generic time
+request after a project conversation selected `convert_time` with invalid data;
+the tool returned `isError: true` but the model incorrectly claimed success.
+The UI exposes the real error (expanded with a warning), and the demo now names
+the precise tool. This is evidence of the small model's planning/interpretation
+limits, not a successful time demonstration. Do not trust final prose without
+checking the tool result.
+
+Browser Reject also ended the proposed file call without executing it. In a
+fresh conversation, Stop during file approval reached `Run cancelled` and
+disabled both decision buttons. A repeated file prompt in a time conversation
+instead produced a reused time answer without a call; fresh-context demos and
+visible tool evidence are therefore essential for this model.
+
+The user also independently demonstrated CLI discovery, approved project reading,
+Python/SQLite follow-up, current Madrid time and rejection after `/clear` in
+pasted terminal logs on this date.
+
+Earlier CLI-only verification:
+
+Branch `b-mcp`, based on main `5750d6a`. With `requirements-mcp.txt` installed,
+`python -m pytest tests -q` passed **299 tests** and **130 subtests** in 33.54 seconds
+in Ubuntu 24.04 / WSL, with no skips. One existing Pydantic configuration
+deprecation warning remains in `structured/api.py`. `pip check` and
+`git -c core.whitespace=cr-at-eol diff --check` also passed (the existing CRLF line
+endings in test_file_chat.py are preserved). There are 29 new MCP checks across
+test_mcp.py and test_mcp_chat.py.
+
+Before MCP changes, the same full collection had 269 passes and one failure:
+test_file_chat expected a positional schema argument, while the current core
+supplies it by keyword. That stale assertion was corrected without changing the
+JSON/file behavior; the original 270 tests now pass alongside the MCP checks.
+
+The new suite exercises real stdio initialization/discovery/calls against our
+project server and the installed third-party Time server, traversal denial,
+missing servers/tools, initialization timeout and child cleanup, cancellation of
+a live call with process cleanup, tool error observations, argument validation,
+allowlisting, bounded loops/results, policy filtering, HTTP failures, rejection,
+and CLI history/save/recovery. Model transport in these automated tests is fake.
+
+Separate live checks used Ollama 0.40.2, `qwen3:0.6b`, MCP SDK 1.30.0 and
+`mcp-server-time` 2026.10.10. The model selected `project__read_project_file`, read
+the actual project_notes.md through MCP and answered Python/SQLite. It selected
+`time__get_current_time` in a second turn and used the returned Madrid timestamp.
+A CLI walkthrough with EV2 enabled additionally exercised `/tools`, scripted `no`
+and `yes`, rejection without a call, approval, both results and clean exit.
+These are agent-run checks, not a substitute for the user's manual demo.
+
+During the walkthrough, SDK cleanup wrapped the rejection exception and obscured
+its message. The integration now preserves safe policy/rejection messages, with
+a regression check. The 0.6B model also declined to select a tool for one prompt
+wording; the final documented walkthrough succeeded. Do not claim model planning
+is reliable for arbitrary wording. Remote MCP HTTP/SSE transports remain pending;
+the web UI is covered by the newer verification above.
+See [MCP.md](MCP.md) for reproducible commands, two stories and current limits.
+
 ## T4 creation and initial A3 approval: 10 October 2026
 
 `python -m unittest discover -s tests -v` passed **97 tests** in 10.176 seconds

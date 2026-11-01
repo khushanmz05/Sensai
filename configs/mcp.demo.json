@@ -1,0 +1,22 @@
+{
+  "servers": [
+    {
+      "name": "project",
+      "command": "$PYTHON",
+      "args": ["-m", "mcp_tools.project_server", "--workspace", "examples"],
+      "cwd": "..",
+      "allow_tools": ["read_project_file"],
+      "auto_approve": [],
+      "timeout": 15
+    },
+    {
+      "name": "time",
+      "command": "$PYTHON",
+      "args": ["-m", "mcp_server_time"],
+      "cwd": "..",
+      "allow_tools": ["get_current_time", "convert_time"],
+      "auto_approve": ["get_current_time", "convert_time"],
+      "timeout": 15
+    }
+  ]
+}

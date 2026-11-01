@@ -515,12 +515,15 @@
         <select id="mode-select">
           <option value="stub" data-sub="Simulated replies, no model needed">Stub</option>
           <option value="ollama" data-sub="Local model through the Ollama HTTP API">Ollama</option>
+          <option value="mcp" data-sub="Model calls configured tools; some actions need approval">MCP</option>
+          <option value="search" data-sub="Search the web, then answer using sources">Web search</option>
         </select>
       </label>
       <label class="chip">Model
         <input id="model-input" type="text" value="llama3.2:1b" spellcheck="false" autocomplete="off">
       </label>
       <span class="grow"></span>
+      <button id="mcp-tools" class="btn" type="button" disabled>MCP tools</button>
       <button id="documents-btn" class="btn" type="button" aria-expanded="false" aria-controls="documents-panel">Documents</button>
       <button id="share-btn" class="btn" type="button" title="Publish a public snapshot of this chat">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 10V2M5 5l3-3 3 3M3 9v4h10V9"/></svg><span class="hide-sm">Share</span>
@@ -566,6 +569,7 @@
         <div class="status-row">
           <span id="status" role="status">Ready</span>
           <span id="policy-status" role="status">Checking content policy...</span>
+          <span id="search-status" role="status" hidden></span>
           <span class="hide-sm"><kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>Esc</kbd> stop</span>
         </div>
       </div>
@@ -822,6 +826,40 @@
     const tokSession = document.getElementById('tok-session');
     const modeSelect = document.getElementById('mode-select');
     const modelInput = document.getElementById('model-input');
+    const mcpTools = document.getElementById('mcp-tools');
+    const searchStatus = document.getElementById('search-status');
+    let searchEnabled = false;
+    function updateSearchStatus() {
+      searchStatus.hidden = modeSelect.value !== 'search';
+      searchStatus.textContent = searchEnabled
+        ? 'Only this message is sent to the search provider. Sources are snippets, not full pages.'
+        : 'Search unavailable. Start the server with SENSAI_SEARCH_URL.';
+    }
+    fetch('/api/search').then(r => r.json()).then(info => {
+      searchEnabled = info.enabled;
+      updateSearchStatus();
+    }).catch(() => { updateSearchStatus(); });
+    modeSelect.addEventListener('change', updateSearchStatus);
+
+    fetch('/api/mcp').then(r => r.json()).then(info => {
+      mcpTools.disabled = !info.enabled;
+      mcpTools.title = info.enabled ? 'List available tools and approval rules' : 'Start the server with SENSAI_MCP_CONFIG to enable MCP';
+    }).catch(() => { mcpTools.title = 'Could not check MCP configuration'; });
+    modeSelect.addEventListener('change', () => {
+      if (modeSelect.value === 'mcp' && modelInput.value === 'llama3.2:1b') modelInput.value = 'qwen3:0.6b';
+    });
+    mcpTools.addEventListener('click', async () => {
+      mcpTools.disabled = true;
+      try {
+        const response = await fetch('/api/mcp/tools');
+        const data = await response.json();
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Tool discovery failed');
+        const listing = addLine('sys-note', data.map(t => t.name + ' · ' + (t.approval === 'ask' ? 'approval required' : 'automatic') + '\n' + t.description).join('\n\n'));
+        listing.style.whiteSpace = 'pre-wrap';
+        listing.style.textAlign = 'left';
+      } catch (error) { addLine('error', error.message, false); }
+      finally { mcpTools.disabled = false; }
+    });
 
     const personaDD = enhanceSelect(personaSelect);
     const modeDD = enhanceSelect(modeSelect);
@@ -1061,6 +1099,8 @@
       setStatus(text, state);
       send.disabled = false;
       cancel.disabled = true;
+      clearBtn.disabled = false;
+      document.querySelectorAll('.mcp-action button').forEach(button => { button.disabled = true; });
       if (currentSource) {
         currentSource.close();
         currentSource = null;
@@ -1113,6 +1153,7 @@
       autosize();
       send.disabled = true;
       cancel.disabled = false;
+      clearBtn.disabled = true;
 
       const userLine = addLine('user', message);
       let safeMessage = message;
@@ -1149,6 +1190,93 @@
       currentRunId = runId;
       setStatus('Run ' + runId.slice(0, 8) + ' · thinking', 'busy');
       currentSource = new EventSource('/api/runs/' + runId + '/events');
+
+      function toolCard(title, payload, expanded = false) {
+        const card = el('details', 'mcp-action');
+        card.open = expanded;
+        card.style.cssText = 'margin:12px 0;padding:14px;border:1px solid currentColor;border-radius:10px;';
+        card.appendChild(el('summary', null, title));
+        const preview = el('pre', null, JSON.stringify(payload, null, 2));
+        preview.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font-size:12px;';
+        card.appendChild(preview);
+        logInner.insertBefore(card, replyNode);
+        scrollDown();
+        return card;
+      }
+      currentSource.addEventListener('tool_call', e => {
+        const data = JSON.parse(e.data).payload;
+        if (data.kind === 'search') {
+          setStatus('Searching the web…', 'busy');
+          return;
+        }
+        if (data.kind !== 'mcp') return;
+        toolCard('Calling ' + data.tool, data.arguments);
+        setStatus('Calling ' + data.tool, 'busy');
+      });
+      currentSource.addEventListener('tool_result', e => {
+        const data = JSON.parse(e.data).payload;
+        if (data.kind === 'search') {
+          const card = el('details', 'search-sources');
+          card.open = true;
+          card.style.cssText = 'margin:12px 0;padding:14px;border:1px solid currentColor;border-radius:10px;';
+          card.appendChild(el('summary', null, 'Web sources · ' + data.sources.length));
+          card.appendChild(el('p', null, 'Retrieved ' + data.fetched_at + ' · Search snippets'));
+          data.warnings.forEach(warning => card.appendChild(el('p', null, warning)));
+          data.sources.forEach(source => {
+            const item = el('div');
+            const link = el('a', null, '[' + source.id + '] ' + source.title);
+            // Never make provider HTML or non-HTTP schemes executable in the UI.
+            try {
+              const url = new URL(source.url);
+              if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
+                link.href = url.href;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+              }
+            } catch { /* A privacy-redacted URL can be unclickable. */ }
+            link.style.overflowWrap = 'anywhere';
+            item.append(link, el('p', null, source.snippet));
+            card.appendChild(item);
+          });
+          logInner.insertBefore(card, replyNode);
+          scrollDown();
+          setStatus(data.sources.length ? 'Sources received · preparing answer' : 'No search results', 'busy');
+          return;
+        }
+        if (data.kind !== 'mcp') return;
+        const card = toolCard((data.result.isError ? 'Tool error · ' : 'Result · ') + data.tool, data.result, data.result.isError);
+        if (data.result.isError) card.appendChild(el('p', null, 'This tool failed. A model answer claiming success is not proof that the action worked.'));
+        setStatus('Tool returned · preparing answer', 'busy');
+      });
+      currentSource.addEventListener('approval_request', e => {
+        const data = JSON.parse(e.data).payload;
+        if (data.kind !== 'mcp') return;
+        const card = toolCard('Allow ' + data.tool + '?', data.arguments, true);
+        const note = el('p', null, 'Approve this call only. Expires in ' + data.timeout_seconds + ' seconds. Reject ends this turn.');
+        const approve = el('button', 'btn', 'Approve');
+        const reject = el('button', 'btn', 'Reject');
+        approve.type = reject.type = 'button';
+        card.append(note, approve, reject);
+        setStatus('Waiting for tool approval', 'busy');
+        async function decide(approved) {
+          if (currentRunId !== runId) return;
+          approve.disabled = reject.disabled = true;
+          try {
+            const response = await fetch('/api/runs/' + runId + '/mcp/decision', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({approval_id: data.approval_id, approved}),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Approval failed');
+            note.textContent = approved ? 'Approved for this call.' : 'Rejected. No further tools will run.';
+            card.open = false;
+          } catch (error) {
+            note.textContent = error.message + ' Use Stop to end the turn.';
+          }
+        }
+        approve.addEventListener('click', () => decide(true));
+        reject.addEventListener('click', () => decide(false));
+      });
 
       currentSource.addEventListener('text_delta', (e) => {
         if (replyNode.classList.contains('waiting')) {

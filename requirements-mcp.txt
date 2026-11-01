@@ -1,0 +1,5 @@
+-r requirements.txt
+# Supported SDK 1.x keeps the project's Python 3.10 compatibility.
+mcp==1.30.0
+mcp-server-time==2026.10.10
+httpx==0.28.1

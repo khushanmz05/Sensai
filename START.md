@@ -2,8 +2,9 @@
 
 This guide takes you from a fresh computer to your first answer in the terminal.
 Use **Ubuntu 24.04 LTS**, either directly on Linux or inside **WSL 2 on Windows**.
-The CLI file features require Linux/WSL. The web UI is an unfinished prototype;
-this guide runs the working terminal application.
+The CLI file features require Linux/WSL. This guide starts the terminal application;
+the [web search guide](docs/WEB_SEARCH.md) explains the browser and a local provider
+without Docker.
 
 You need an internet connection for installation, permission to install software,
 and access to this repository or a project ZIP supplied by the team. Allow several
@@ -257,6 +258,8 @@ After completing setup, use the examples in the README:
 - [Structured JSON output](README.md#structured-json-output-t5-member-b).
 - [Read a project file](README.md#read-a-project-file-t4-first-increment-linuxwsl).
 - [Save an answer with confirmation](README.md#save-an-answer-after-confirmation-t4--initial-a3).
+- [MCP tools: optional setup and two server demonstrations](docs/MCP.md), including
+  [browser launch, Approve/Reject and Stop](docs/MCP.md#web-chat-step-by-step).
 
 Exit each chat with `/exit` before starting the next example. For the full manual
 checklist and recorded verification, see [docs/VERIFY.md](docs/VERIFY.md).

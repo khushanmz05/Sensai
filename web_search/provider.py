@@ -1,4 +1,4 @@
-"""Bounded SearXNG JSON client; uses the Python standard library."""
+"""Bounded SearXNG JSON client: urllib CLI and cancellable HTTPX web transport."""
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -113,6 +113,41 @@ class SearxSearch:
             raise SearchError('Search unavailable: check the provider, network and timeout.') from error
         if len(raw) > MAX_RESPONSE_BYTES:
             raise SearchError('Search response exceeded the 1 MiB limit.')
+        return self._parse_response(raw, query)
+
+    async def search_async(self, query):
+        """Cancellable web transport with an overall deadline and the same parser."""
+        import asyncio
+        import httpx
+        if not isinstance(query, str) or not query.strip() or len(query) > 500:
+            raise SearchError('Search query must contain 1 to 500 characters.')
+        query = query.strip()
+
+        async def receive():
+            async with httpx.AsyncClient(timeout=self.timeout, trust_env=False,
+                                         follow_redirects=False) as client:
+                async with client.stream('GET', self.endpoint, params={
+                    'q': query, 'format': 'json', 'categories': 'general',
+                }, headers={'Accept': 'application/json', 'User-Agent': 'Sensai/1.0'}) as response:
+                    if response.status_code == 403:
+                        raise SearchError('Search denied (403). Enable JSON format on the SearXNG instance.')
+                    if response.status_code == 429:
+                        raise SearchError('Search rate limit reached (429). Retry later.')
+                    if response.status_code != 200:
+                        raise SearchError(f'Search provider returned HTTP {response.status_code}.')
+                    chunks, size = [], 0
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > MAX_RESPONSE_BYTES:
+                            raise SearchError('Search response exceeded the 1 MiB limit.')
+                        chunks.append(chunk)
+                    return self._parse_response(b''.join(chunks), query)
+        try:
+            return await asyncio.wait_for(receive(), self.timeout)
+        except (httpx.HTTPError, asyncio.TimeoutError) as error:
+            raise SearchError('Search unavailable: check the provider, network and timeout.') from error
+
+    def _parse_response(self, raw, query):
         try:
             data = json.loads(raw.decode('utf-8'))
         except (ValueError, UnicodeError, RecursionError) as error:
