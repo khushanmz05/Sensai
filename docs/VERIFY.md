@@ -1,5 +1,30 @@
 # Verification
 
+## T2 isolated Python execution: 1 November 2026
+
+Branch `b-t2-sandbox`, based on main `a12afdc`: **410 tests and 155 subtests**
+passed in 48.04 seconds, no skips, one existing Pydantic warning.
+`python -m sandbox`, `pip check` and `git diff --check` also passed.
+
+Ten sandbox tests and two added web tests cover real Bubblewrap/seccomp
+execution, tracebacks, host-file/environment protection, forbidden writes,
+network/fork/direct-syscall denial, CPU/memory/wall/output limits, cancellation,
+MCP repair feedback, approval/refusal and bounded retry behavior. Existing MCP
+and search web tests referenced the old `core.chat.retrieve` name; their mocks
+now target `retrieve_advanced`, matching the current main implementation.
+
+Live Ollama/qwen3:0.6b: first execution of `len(value)` returned NameError;
+the model corrected it to `len(values)`, reran the program and observed `20.0`.
+The first trial returned a prose-only repair; a bounded reminder was added so
+an unsuccessful Python run cannot be reported as successfully repaired without
+another execution. The subsequent real trial completed both calls successfully.
+The harness explicitly approved the known demo code. Normal CLI/web approval
+and Stop paths were separately exercised using real MCP and sandbox execution,
+with deterministic model messages. No browser UI change was required.
+
+The WSL machine uses Ubuntu Bubblewrap 0.9.0 from the user's package cache and
+system libseccomp. See SANDBOX.md for installation and supported restrictions.
+
 ## T3 CLI and web: 29 October 2026
 
 Branch `b-t3-search`, based on main `dc16e46`: **320 tests and 148 subtests**

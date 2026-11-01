@@ -5,6 +5,8 @@ This working copy includes the CLI chat, personas (A5), and structured workflows
 (T5) with persistent task lists, plans and custom records in the CLI and browser.
 T4 provides opt-in file context and creation of new files for Linux/WSL.
 The first A3 increment previews each save and requires explicit confirmation.
+T2 runs Python in a restricted Linux/WSL subprocess and feeds errors back to the
+model for bounded correction, through MCP in both CLI and web.
 It does not implement the full Sensai feature catalogue.
 
 ## Install and run for the first time
@@ -63,6 +65,24 @@ Also handles timeouts, HTTP errors, errors within streams, malformed responses,
 empty answers and streams that end without a completion marker.
 Only a complete question/answer pair is committed to history. Partial visible output
 is not reused after an error. All model calls use `POST /api/chat` directly.
+
+## Sandboxed Python execution (T2, member B)
+
+Follow [the sandbox setup and demonstration guide](docs/SANDBOX.md).
+Ubuntu/WSL requires Bubblewrap and libseccomp2, plus `requirements-mcp.txt`.
+Verify with `python -m sandbox`, then run:
+
+```bash
+python chatbot.py --model qwen3:0.6b --mcp-config configs/mcp.sandbox.json --guardrails guardrails/demo.json
+```
+
+Ask `/mcp Use python__execute_python to calculate and print sum(range(11)).`
+Approve the displayed program; inspect actual stdout and exit code. Failures and
+tracebacks return to the model for corrected execution, with a new confirmation
+per attempt. Web uses the same config via `SENSAI_MCP_CONFIG` and **MCP** mode.
+The sandbox has no network, host-project access, writes or child processes.
+Limits: 256 MiB, 2 CPU seconds, 5 wall seconds, 4 KiB output; four calls per turn
+by default. Missing isolation causes an error, never host execution.
 
 ## Structured JSON output (T5, member B)
 
