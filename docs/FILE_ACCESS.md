@@ -1,7 +1,8 @@
-# T4 file context and creation with initial A3 approval
+# File access and confirmed creation
 
-Owner: B. Status: CLI read/create implementation with confirmation; full T4 and
-general A3 remain in progress. Editing existing files and model-selected tools are pending.
+The CLI can attach a workspace file or create a new file after confirmation.
+Existing files cannot be edited or overwritten. For model-selected file reads and
+browser tool approvals, see [MCP tools](MCP.md). These are separate entry points.
 
 ## Usage (Linux/WSL)
 
@@ -93,9 +94,9 @@ output or an older answer will not silently be saved. `/clear` also clears it.
 JSON mode saves only the locally validated JSON response. Save requests, previews
 and decisions do not add turns or make another model call.
 
-This is a synchronous CLI approval for one file operation. It does not yet provide
-general tool approval, persistent waiting requests, a web approval UI, or an
-approval origin guarantee for untrusted callers of the Python API. The directory
+This file-creation flow uses a synchronous CLI approval. It does not expose file
+creation in the browser or persist waiting requests across restarts. The Python API
+assumes a trusted caller supplies approval decisions. The directory
 must be under the operator's control; this is not a sandbox against another local
 process that can arbitrarily rename/mount directories or modify temporary files.
 
@@ -103,7 +104,8 @@ process that can arbitrarily rename/mount directories or modify temporary files.
 
 One file can be pending. A successful `/read` replaces the pending file. A failed
 read clears it, preventing accidental reuse of an older attachment. `/clear`
-discards both pending content and conversation history. To attach a path containing
+discards pending content and starts a new session; the previous session stays saved.
+To attach a path containing
 spaces, type it directly after `/read` without shell quotes.
 
 The next question contains a JSON-encoded file reference in a user message.
@@ -114,8 +116,10 @@ Permissions are enforced in code independently of model text.
 After a successful answer, the question and file reference are committed to
 session history once. The file is not reread for follow-ups. On an Ollama error,
 invalid JSON exhaustion or cancellation, history is unchanged and the pending file
-is retained for a retry. `/clear` removes it. Like other chat history, file context
-is lost on exit. Token budgeting is a separate feature, not implemented here.
+is retained for a retry. `/clear` removes the pending attachment. Successfully saved
+turns, including their file context, remain in the persisted session. An attachment
+that has not yet been sent is held only in memory. See [configuration](CONFIGURATION.md)
+for session commands and [the feature register](FEATURES.md) for memory limits.
 
 ## Verification
 
