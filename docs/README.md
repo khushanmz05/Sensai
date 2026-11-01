@@ -36,7 +36,6 @@ belong in the verification record.
 | [Feature register](FEATURES.md) | All 28 catalogue entries, current status and evidence |
 | [User stories](USER_STORIES.md) | Two concrete scenarios per feature, tags and acceptance criteria |
 | [Scope and ownership](SCOPING.md) | Team responsibilities and definition of done |
-| [Mid-term follow-up](MIDTERM_FOLLOWUP.md) | Instructor feedback mapped to changes and remaining work |
 | [Persona checks](PERSONA_CHECKS.md) | Repeatable questions, expectations and result template |
 | [30-minute defense](DEMO.md) | One connected scenario, timing and fallback material |
 

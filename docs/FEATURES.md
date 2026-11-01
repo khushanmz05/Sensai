@@ -3,47 +3,39 @@
 Reviewed against **main `c0db73b` on 1 November 2026**. This is a delivery map,
 not a grade prediction or a substitute for live acceptance.
 
-| Status | Meaning |
-| --- | --- |
-| Available | A usable path exists in main for the stated scope; see limits and evidence. |
-| Partial | Components or a subset of behavior exist, but the complete workflow has gaps. |
-| Planned | No integrated implementation was found in this main revision. |
+Every entry links to its implementation or guide and has two
+[user stories](USER_STORIES.md) with acceptance criteria.
 
-Every entry has two [user stories](USER_STORIES.md). A status describes the
-implementation; passing all story criteria requires recorded evidence. In
-particular, persona behavior and some live retrieval/quality checks still need
-fresh validation even where the underlying workflow is available.
-
-| ID | Capability | Status | Owner | Entry point / evidence |
-| --- | --- | --- | --- | --- |
-| B1 | Local chat | Available | A | [chat tests](../tests/test_chatbot.py) |
-| M1 | Sessions and profiles | Available | A | [session tests](../tests/test_session_store.py) |
-| M2 | Context budgeting and compression | Planned | A | [scope](SCOPING.md) |
-| M3 | Structured memory | Planned | A | [scope](SCOPING.md) |
-| M4 | Living artifacts | Partial | D | [artifact service](../artifacts/service.py) |
-| T1 | MCP tools | Available | B | [MCP guide](MCP.md) |
-| T2 | Sandboxed Python | Available | B | [sandbox guide](SANDBOX.md) |
-| T3 | Live web search | Available | B | [search guide](WEB_SEARCH.md) |
-| T4 | Permitted file access | Available | B | [file guide](FILE_ACCESS.md) |
-| T5 | Structured results | Available | B | [structured workflow](STRUCTURED_WORKSPACE.md) |
-| R1 | Document retrieval | Available | C | [retrieval guide](WEB_DOCUMENT_UPLOAD.md) |
-| R2 | Advanced retrieval | Partial | C | [retrieval implementation](../retrieval/rag.py) |
-| A1 | Reasoning and action loops | Partial | A | [MCP loop](../mcp_tools/runner.py) |
-| A2 | Multiple agents | Planned | A | [scope](SCOPING.md) |
-| A3 | Human approval | Available | B | [MCP approvals](MCP.md) |
-| A4 | Prompt versions | Available | D | [version store](../prompts/versioning.py) |
-| A5 | Personas | Available | D | [persona question set](PERSONA_CHECKS.md) |
-| A6 | Semantic cache | Available | C | [cache tests](../tests/test_semantic_cache.py) |
-| A7 | Prompt optimization | Partial | C | [quality guide](QUALITY.md) |
-| EV1 | Answer evaluation | Available | C | [evaluation guide](EV1_EVALUATION.md) |
-| EV2 | Content and privacy rules | Available | B | [guardrails](GUARDRAILS.md) |
-| EV3 | Run monitoring | Partial | D | [event store](../events/store.py) |
-| EV4 | Adversarial testing | Available | C | [attack report](ev4_adversarial_testing.md) |
-| X1 | Browser interface | Available | D | [web service](../web/app.py) |
-| X2 | Branching and interruption | Partial | A | [web run control](../web/app.py) |
-| X3 | Export and sharing | Partial | D | [export service](../export/service.py) |
-| X4 | Questions and forms | Partial | D | [form validation](../forms/service.py) |
-| X5 | Scheduling | Planned | A | [scope](SCOPING.md) |
+| ID | Capability | Owner | Entry point / evidence |
+| --- | --- | --- | --- |
+| B1 | Local chat | A | [chat tests](../tests/test_chatbot.py) |
+| M1 | Sessions and profiles | A | [session tests](../tests/test_session_store.py) |
+| M2 | Context budgeting and compression | A | [scope](SCOPING.md) |
+| M3 | Structured memory | A | [scope](SCOPING.md) |
+| M4 | Living artifacts | D | [artifact service](../artifacts/service.py) |
+| T1 | MCP tools | B | [MCP guide](MCP.md) |
+| T2 | Sandboxed Python | B | [sandbox guide](SANDBOX.md) |
+| T3 | Live web search | B | [search guide](WEB_SEARCH.md) |
+| T4 | Permitted file access | B | [file guide](FILE_ACCESS.md) |
+| T5 | Structured results | B | [structured workflow](STRUCTURED_WORKSPACE.md) |
+| R1 | Document retrieval | C | [retrieval guide](WEB_DOCUMENT_UPLOAD.md) |
+| R2 | Advanced retrieval | C | [retrieval implementation](../retrieval/rag.py) |
+| A1 | Reasoning and action loops | A | [MCP loop](../mcp_tools/runner.py) |
+| A2 | Multiple agents | A | [scope](SCOPING.md) |
+| A3 | Human approval | B | [MCP approvals](MCP.md) |
+| A4 | Prompt versions | D | [version store](../prompts/versioning.py) |
+| A5 | Personas | D | [persona question set](PERSONA_CHECKS.md) |
+| A6 | Semantic cache | C | [cache tests](../tests/test_semantic_cache.py) |
+| A7 | Prompt optimization | C | [quality guide](QUALITY.md) |
+| EV1 | Answer evaluation | C | [evaluation guide](EV1_EVALUATION.md) |
+| EV2 | Content and privacy rules | B | [guardrails](GUARDRAILS.md) |
+| EV3 | Run monitoring | D | [event store](../events/store.py) |
+| EV4 | Adversarial testing | C | [attack report](ev4_adversarial_testing.md) |
+| X1 | Browser interface | D | [web service](../web/app.py) |
+| X2 | Branching and interruption | A | [web run control](../web/app.py) |
+| X3 | Export and sharing | D | [export service](../export/service.py) |
+| X4 | Questions and forms | D | [form validation](../forms/service.py) |
+| X5 | Scheduling | A | [scope](SCOPING.md) |
 
 ## Scope and remaining gaps
 
@@ -80,7 +72,7 @@ fresh validation even where the underlying workflow is available.
 
 The web RAG toggle, full per-turn context inspector, held-out A7 report and
 recorded persona behavior run remain open. The 30-minute demonstration is a
-prepared runbook, not a completed rehearsal. See [mid-term follow-up](MIDTERM_FOLLOWUP.md).
+prepared runbook, not a completed rehearsal.
 
 Unmerged branches may contain additional work. Do not mark a feature released
 until its integration and verification are visible in main. Update this register,

@@ -10,9 +10,9 @@ observable acceptance checks. Repeated generic checklist text has been removed.
 
 - Search by feature tag (`T2`, `R1`, `A7`), surface (`CLI`, `web`, `API`) or owner.
 - Keep story IDs stable when implementation changes.
-- **Available / Partial / Planned** describe the feature in main; criteria are
-  the acceptance target, not an assertion that every check has already passed.
-- Use [FEATURES.md](FEATURES.md) as the compact status/evidence index and
+- Criteria define the acceptance target; record the outcome of each check
+  against its story ID.
+- Use [FEATURES.md](FEATURES.md) as the compact feature/evidence index and
   [VERIFY.md](VERIFY.md) to record a result against a story ID.
 
 ## Coverage and navigation
@@ -29,7 +29,7 @@ observable acceptance checks. Repeated generic checklist text has been removed.
 
 ## B1 — Local chat
 
-`B1` `CLI` `owner-A` · **Available** · [chat tests](../tests/test_chatbot.py)
+`B1` `CLI` `owner-A` · [chat tests](../tests/test_chatbot.py)
 
 ### B1-1 — Ask a follow-up
 
@@ -49,7 +49,7 @@ As a user, I want understandable errors, so that I can continue after a connecti
 
 ## M1 — Sessions and profiles
 
-`M1` `CLI` `web` `API` `owner-A` · **Available** · [session tests](../tests/test_session_store.py)
+`M1` `CLI` `web` `API` `owner-A` · [session tests](../tests/test_session_store.py)
 
 ### M1-1 — Resume a study session
 
@@ -69,7 +69,7 @@ As a student, I want to save my language and explanation level, so that future a
 
 ## M2 — Context budgeting and compression
 
-`M2` `CLI` `web` `owner-A` · **Planned** · [scope](SCOPING.md)
+`M2` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
 ### M2-1 — Continue a long conversation
 
@@ -89,7 +89,7 @@ As a developer, I want compression to preserve decisions, so that the assistant 
 
 ## M3 — Structured memory
 
-`M3` `CLI` `web` `owner-A` · **Planned** · [scope](SCOPING.md)
+`M3` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
 ### M3-1 — Remember a project fact
 
@@ -109,7 +109,7 @@ As a developer, I want to correct stored knowledge, so that later answers use th
 
 ## M4 — Living artifacts
 
-`M4` `API` `owner-D` · **Partial** · [artifact service](../artifacts/service.py)
+`M4` `API` `owner-D` · [artifact service](../artifacts/service.py)
 
 ### M4-1 — Update one document section
 
@@ -129,7 +129,7 @@ As a collaborator, I want outdated edits rejected, so that one update cannot sil
 
 ## T1 — MCP tools
 
-`T1` `CLI` `web` `owner-B` · **Available** · [MCP guide](MCP.md)
+`T1` `CLI` `web` `owner-B` · [MCP guide](MCP.md)
 
 ### T1-1 — Read through a project tool
 
@@ -149,7 +149,7 @@ As a distributed teammate, I want timezone information from a time tool, so that
 
 ## T2 — Sandboxed Python
 
-`T2` `CLI` `web` `owner-B` · **Available** · [sandbox guide](SANDBOX.md)
+`T2` `CLI` `web` `owner-B` · [sandbox guide](SANDBOX.md)
 
 ### T2-1 — Check a calculation
 
@@ -169,7 +169,7 @@ As a student, I want the assistant to use a traceback, so that it fixes and reru
 
 ## T3 — Live web search
 
-`T3` `CLI` `web` `owner-B` · **Available** · [search guide](WEB_SEARCH.md)
+`T3` `CLI` `web` `owner-B` · [search guide](WEB_SEARCH.md)
 
 ### T3-1 — Find current documentation
 
@@ -189,7 +189,7 @@ As a user, I want search failures distinguished from evidence, so that I do not 
 
 ## T4 — Permitted file access
 
-`T4` `CLI` `MCP` `API` `owner-B` · **Available** · [file guide](FILE_ACCESS.md)
+`T4` `CLI` `MCP` `API` `owner-B` · [file guide](FILE_ACCESS.md)
 
 ### T4-1 — Attach a project note
 
@@ -209,7 +209,7 @@ As a student, I want to save a useful answer, so that I can keep it with my stud
 
 ## T5 — Structured results
 
-`T5` `CLI` `web` `owner-B` · **Available** · [structured workflow](STRUCTURED_WORKSPACE.md)
+`T5` `CLI` `web` `owner-B` · [structured workflow](STRUCTURED_WORKSPACE.md)
 
 ### T5-1 — Turn notes into a checklist
 
@@ -229,7 +229,7 @@ As a student, I want a structured plan, so that another interface can use its or
 
 ## R1 — Document retrieval
 
-`R1` `CLI` `web` `owner-C` · **Available** · [retrieval guide](WEB_DOCUMENT_UPLOAD.md)
+`R1` `CLI` `web` `owner-C` · [retrieval guide](WEB_DOCUMENT_UPLOAD.md)
 
 ### R1-1 — Answer from a document
 
@@ -249,7 +249,7 @@ As a user, I want invalid documents rejected clearly, so that I know which mater
 
 ## R2 — Advanced retrieval
 
-`R2` `web` `Python API` `owner-C` · **Partial** · [retrieval implementation](../retrieval/rag.py)
+`R2` `web` `Python API` `owner-C` · [retrieval implementation](../retrieval/rag.py)
 
 ### R2-1 — Rank useful passages first
 
@@ -269,7 +269,7 @@ As a developer, I want to filter document metadata, so that an answer uses the i
 
 ## A1 — Reasoning and action loops
 
-`A1` `CLI` `web` `owner-A` · **Partial** · [MCP loop](../mcp_tools/runner.py)
+`A1` `CLI` `web` `owner-A` · [MCP loop](../mcp_tools/runner.py)
 
 ### A1-1 — Use an observation to continue
 
@@ -289,7 +289,7 @@ As a user, I want repeated attempts to stop, so that an unsolved task cannot run
 
 ## A2 — Multiple agents
 
-`A2` `CLI` `web` `owner-A` · **Planned** · [scope](SCOPING.md)
+`A2` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
 ### A2-1 — Delegate research and review
 
@@ -309,7 +309,7 @@ As a developer, I want a coordinator to reconcile agent feedback, so that I rece
 
 ## A3 — Human approval
 
-`A3` `CLI` `web` `owner-B` · **Available** · [MCP approvals](MCP.md)
+`A3` `CLI` `web` `owner-B` · [MCP approvals](MCP.md)
 
 ### A3-1 — Review before acting
 
@@ -329,7 +329,7 @@ As a user, I want to reject or cancel an action, so that an unwanted operation d
 
 ## A4 — Prompt versions
 
-`A4` `API` `dashboard` `owner-D` · **Available** · [version store](../prompts/versioning.py)
+`A4` `API` `dashboard` `owner-D` · [version store](../prompts/versioning.py)
 
 ### A4-1 — Compare prompt versions
 
@@ -349,7 +349,7 @@ As a maintainer, I want to roll back a prompt, so that a poor edit does not affe
 
 ## A5 — Personas
 
-`A5` `CLI` `web` `owner-D` · **Available** · [persona question set](PERSONA_CHECKS.md)
+`A5` `CLI` `web` `owner-D` · [persona question set](PERSONA_CHECKS.md)
 
 ### A5-1 — Switch from tutoring to review
 
@@ -369,7 +369,7 @@ As a maintainer, I want persona settings outside source code, so that I can adap
 
 ## A6 — Semantic cache
 
-`A6` `shared chat` `owner-C` · **Available** · [cache tests](../tests/test_semantic_cache.py)
+`A6` `shared chat` `owner-C` · [cache tests](../tests/test_semantic_cache.py)
 
 ### A6-1 — Reuse a similar answer
 
@@ -389,7 +389,7 @@ As a user, I want contextual questions to bypass the cache, so that earlier proj
 
 ## A7 — Prompt optimization
 
-`A7` `API` `owner-C` · **Partial** · [quality guide](QUALITY.md)
+`A7` `API` `owner-C` · [quality guide](QUALITY.md)
 
 ### A7-1 — Measure a better prompt
 
@@ -409,7 +409,7 @@ As a maintainer, I want an independent evaluation set, so that a higher optimiza
 
 ## EV1 — Answer evaluation
 
-`EV1` `web` `Python API` `owner-C` · **Available** · [evaluation guide](EV1_EVALUATION.md)
+`EV1` `web` `Python API` `owner-C` · [evaluation guide](EV1_EVALUATION.md)
 
 ### EV1-1 — Check source faithfulness
 
@@ -429,7 +429,7 @@ As a user, I want evaluation status separate from the answer, so that a missing 
 
 ## EV2 — Content and privacy rules
 
-`EV2` `CLI` `web` `API` `owner-B` · **Available** · [guardrails](GUARDRAILS.md)
+`EV2` `CLI` `web` `API` `owner-B` · [guardrails](GUARDRAILS.md)
 
 ### EV2-1 — Block a prohibited request
 
@@ -449,7 +449,7 @@ As a user, I want sensitive fields filtered from released output, so that suppor
 
 ## EV3 — Run monitoring
 
-`EV3` `dashboard` `API` `owner-D` · **Partial** · [event store](../events/store.py)
+`EV3` `dashboard` `API` `owner-D` · [event store](../events/store.py)
 
 ### EV3-1 — Inspect a run
 
@@ -469,7 +469,7 @@ As a maintainer, I want a metrics view, so that I can spot changes in latency or
 
 ## EV4 — Adversarial testing
 
-`EV4` `test suite` `reports` `owner-C` · **Available** · [attack report](ev4_adversarial_testing.md)
+`EV4` `test suite` `reports` `owner-C` · [attack report](ev4_adversarial_testing.md)
 
 ### EV4-1 — Probe malicious source text
 
@@ -489,7 +489,7 @@ As a maintainer, I want before/after attack results, so that I can judge whether
 
 ## X1 — Browser interface
 
-`X1` `web` `owner-D` · **Available** · [web service](../web/app.py)
+`X1` `web` `owner-D` · [web service](../web/app.py)
 
 ### X1-1 — Work from a browser
 
@@ -509,7 +509,7 @@ As a user, I want visible tool controls, so that I can inspect and control model
 
 ## X2 — Branching and interruption
 
-`X2` `web` `CLI` `owner-A` · **Partial** · [web run control](../web/app.py)
+`X2` `web` `CLI` `owner-A` · [web run control](../web/app.py)
 
 ### X2-1 — Explore an alternative message
 
@@ -529,7 +529,7 @@ As a user, I want to interrupt a run, so that I can change direction without wai
 
 ## X3 — Export and sharing
 
-`X3` `web` `API` `owner-D` · **Partial** · [export service](../export/service.py)
+`X3` `web` `API` `owner-D` · [export service](../export/service.py)
 
 ### X3-1 — Download a deliverable
 
@@ -549,7 +549,7 @@ As a team member, I want a public snapshot link, so that a reviewer can read the
 
 ## X4 — Questions and forms
 
-`X4` `API` `owner-D` · **Partial** · [form validation](../forms/service.py)
+`X4` `API` `owner-D` · [form validation](../forms/service.py)
 
 ### X4-1 — Clarify a missing requirement
 
@@ -569,7 +569,7 @@ As a user, I want field-level feedback, so that I can correct a form without res
 
 ## X5 — Scheduling
 
-`X5` `CLI` `web` `owner-A` · **Planned** · [scope](SCOPING.md)
+`X5` `CLI` `web` `owner-A` · [scope](SCOPING.md)
 
 ### X5-1 — Schedule a project summary
 
@@ -586,16 +586,3 @@ As a user, I want to disable and resume scheduled work, so that it runs only whe
 - Persist enabled/disabled state.
 - Restore schedules correctly after restart.
 - Show the next run and recent outcomes without duplicating jobs.
-
-## Mid-term acceptance additions
-
-These cross-feature requirements supplement the catalogue stories without hiding
-unfinished runtime work behind a documentation change.
-
-| ID | Tags | User story | Observable acceptance | Current state |
-| --- | --- | --- | --- | --- |
-| MT-1 | `A5` `evaluation` | As a reviewer, I want fixed persona questions, so that I can compare roles consistently. | Run the same questions, record expected versus actual behavior, and test a mid-session switch. | Question pack written; live results pending. |
-| MT-2 | `R1` `X1` | As a user, I want to disable RAG, so that I can compare a response with and without my documents. | A visible switch prevents retrieval and new chunk injection without deleting the index; enabling it restores retrieval. | CLI can omit document ingestion; web toggle missing. |
-| MT-3 | `EV3` `X1` | As a reviewer, I want to inspect every turn's context, so that I can see exactly what influenced the answer. | Show the assembled prompt, history, full selected chunks, tool observations and relevant settings for the selected run. | Events and source metadata exist; full inspector missing. |
-| MT-4 | `A7` `evaluation` | As a maintainer, I want measured optimization evidence, so that I can justify the technique and its benefit. | State the search method and objective; separate development and holdout data; report before/after outcomes. | Optimizer implemented; independent evidence pending. |
-| MT-5 | `docs` `defense` | As a presenter, I want one timed scenario, so that the team can demonstrate the release in 30 minutes. | Map every claimed feature to evidence, assign speakers, rehearse twice and stay within the limit. | Runbook written; complete feature coverage and rehearsal pending. |

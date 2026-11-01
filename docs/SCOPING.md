@@ -56,8 +56,8 @@ acceptance should record both, rather than infer success from the model's prose.
 
 ## Next integration priorities
 
-Use the [mid-term checklist](MIDTERM_FOLLOWUP.md) for the instructor's specific
-requests: persona behavior evidence, useful structured results, measured prompt
-optimization, a RAG toggle, per-turn context inspection and a timed demonstration.
+Integration priorities include persona behavior evidence, useful structured
+results, measured prompt optimization, a RAG toggle, per-turn context inspection
+and a timed demonstration. See the [acceptance criteria](USER_STORIES.md).
 Also close the planned and partial catalogue entries in the feature register.
 This documentation update changes no runtime behavior.

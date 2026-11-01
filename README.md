@@ -78,9 +78,8 @@ Some checks require the optional MCP and sandbox dependencies. See
 [verification](docs/VERIFY.md) for prerequisites, recorded evidence and the
 difference between automated tests and real-model demonstrations.
 
-For the defense, use the [30-minute runbook](docs/DEMO.md),
-[persona question set](docs/PERSONA_CHECKS.md) and
-[mid-term follow-up checklist](docs/MIDTERM_FOLLOWUP.md).
+For the defense, use the [30-minute runbook](docs/DEMO.md) and
+[persona question set](docs/PERSONA_CHECKS.md).
 
 This is a local educational application. Model output and judge scores are not
 proof of correctness; the UI and API have no authentication. Keep the documented

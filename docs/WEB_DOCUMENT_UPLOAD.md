@@ -55,6 +55,5 @@ This startup choice is not a runtime on/off switch.
 | Embedding failure | The upload code references a fallback helper that is absent from the current retrieval module. Do not rely on fallback indexing; install/check the real embedding model and retry. |
 | Quality | Source inclusion does not guarantee that the model uses it correctly. Compare the answer with the actual note. |
 
-These gaps are tracked in [mid-term follow-up](MIDTERM_FOLLOWUP.md), not treated as
-resolved by this guide. See [evaluation](EV1_EVALUATION.md) for the conditions under
+See [evaluation](EV1_EVALUATION.md) for the conditions under
 which the web service judges an answer against its retrieved context.
