@@ -47,7 +47,7 @@ class SearchWebTests(unittest.IsolatedAsyncioTestCase):
                             'store': self.events, 'prompts': prompts, 'vector_store': vectors,
                             'workspace_writer': None, 'searcher': self.searcher}.items():
             self.stack.enter_context(patch.object(self.web.app.state, name, value))
-        self.stack.enter_context(patch('core.chat.retrieve', return_value=[]))
+        self.stack.enter_context(patch('core.chat.retrieve_advanced', return_value=[]))
         self.stack.enter_context(patch.object(settings, 'check_ollama_alive', return_value=False))
         self.model = self.stack.enter_context(patch('core.chat.stream_reply', side_effect=lambda *a, **k: iter(['Grounded answer'])))
 
