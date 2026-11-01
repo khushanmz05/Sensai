@@ -329,9 +329,10 @@ def get_session(session_id: str):
 @app.post('/api/sessions/{session_id}/clear')
 def clear_session(session_id: str):
     sess = app.state.session_store.get_session(session_id)
-    if not sess:
-        raise HTTPException(status_code=404, detail='Session not found.')
-    app.state.session_store.clear_session_messages(session_id)
+    # The browser chooses an ID before the first message creates its session.
+    # Clearing that empty conversation (or a stale ID) is already complete.
+    if sess:
+        app.state.session_store.clear_session_messages(session_id)
     return {'status': 'cleared', 'session_id': session_id}
 
 

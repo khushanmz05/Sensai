@@ -1,0 +1,13 @@
+{
+  "servers": [
+    {
+      "name": "python",
+      "command": "$PYTHON",
+      "args": ["-m", "mcp_tools.python_server"],
+      "cwd": "..",
+      "allow_tools": ["execute_python"],
+      "auto_approve": [],
+      "timeout": 15
+    }
+  ]
+}

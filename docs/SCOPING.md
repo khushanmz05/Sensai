@@ -142,7 +142,14 @@ preliminary owner effort, not the difficulty ratings in the assignment PDF.
 
 ### T2 — Sandboxed Code Execution
 
-**Done when:** Execute code in an isolated container with time and resource limits; return stdout and tracebacks to the model; demonstrate correction and another execution.
+**Done when:** Execute code in an isolated container or isolated subprocess with time and resource limits; return stdout and tracebacks to the model; demonstrate correction and another execution.
+
+**Implemented 1 November 2026:** Python standard-library execution through MCP in
+CLI and web, using Bubblewrap namespaces, seccomp, resource limits and per-call
+approval. A live model repaired a NameError and reran successfully. See
+`SANDBOX.md` for installation, restrictions and reproducible checks. This replaces
+the preliminary Docker runtime choice for T2; it does not depend on A1's separate
+ReAct implementation.
 
 **Two user scenarios:** test a code example; fix code using a traceback. See `USER_STORIES.md` for complete stories and acceptance criteria.
 

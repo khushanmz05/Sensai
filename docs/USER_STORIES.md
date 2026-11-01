@@ -147,22 +147,30 @@ Owner: B. First integration target: week 2.
 
 ## T2-1 — Test a code example
 
+Status: integrated in CLI and web MCP mode on 1 November 2026. Linux/WSL
+Bubblewrap + seccomp runtime; real execution and live-model correction verified.
+See SANDBOX.md for setup, demo and limits. Tags: `T2`, `A3`, `CLI`, `web`, `member-B`.
+
 As a developer using Sensai, I want to test a code example, so that I can verify the proposed solution works.
 
 Acceptance criteria:
 - The scenario "test a code example" works through the shared backend with real data, without substituting a mock result.
-- Execute code in an isolated container with time and resource limits; return stdout and tracebacks to the model; demonstrate correction and another execution.
+- Execute Python in an isolated subprocess with time/resource limits and explicit approval; return stdout, stderr and exit code. No host execution fallback.
 - The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
 
 Owner: B. First integration target: week 3.
 
 ## T2-2 — Fix code using a traceback
 
+Status: integrated. A real qwen3:0.6b run repaired `len(value)` to `len(values)`
+after observing NameError and reran successfully with stdout `20.0`.
+Tags: `T2`, `T1`, `A3`, `CLI`, `web`, `member-B`.
+
 As a developer using Sensai, I want to fix code using a traceback, so that I can receive a corrected and retested example.
 
 Acceptance criteria:
 - The scenario "fix code using a traceback" works through the shared backend with real data, without substituting a mock result.
-- Execute code in an isolated container with time and resource limits; return stdout and tracebacks to the model; demonstrate correction and another execution.
+- Return the actual traceback to the model and require another approved execution to verify the repair; default four calls total. Prose-only repair after failure is not accepted as success.
 - The user can distinguish success from a dependency failure; completion is verified by a test or reproducible demonstration.
 
 Owner: B. First integration target: week 3.
