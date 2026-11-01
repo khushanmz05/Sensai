@@ -2,6 +2,12 @@
 
 ## T2 isolated Python execution: 1 November 2026
 
+Screenshot follow-up: Clear returned HTTP 404 before the browser's session had
+been created. Clearing an absent session is now idempotently successful; existing
+sessions still clear only their own messages and keep the selected persona.
+All 13 MCP web tests and 2 subtests passed after this fix (8.32 seconds), including
+clearing a missing session twice and preserving a different session's history.
+
 Branch `b-t2-sandbox`, based on main `a12afdc`: **410 tests and 155 subtests**
 passed in 48.04 seconds, no skips, one existing Pydantic warning.
 `python -m sandbox`, `pip check` and `git diff --check` also passed.

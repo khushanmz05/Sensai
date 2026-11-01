@@ -125,6 +125,21 @@ class McpWebTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.sessions.list_sessions())
         self.model.assert_not_called()
 
+    async def test_clear_before_first_message_is_idempotent_and_scoped(self):
+        for _ in range(2):
+            status, body = await self.request('POST', '/api/sessions/not-created-yet/clear')
+            self.assertEqual(status, 200, body)
+            self.assertEqual(json.loads(body)['status'], 'cleared')
+        self.assertFalse(self.sessions.list_sessions())
+        for session_id in ('clear-target', 'keep-other'):
+            self.sessions.create_session(session_id=session_id, persona_id='explainer')
+            self.sessions.add_message(session_id, 'user', 'Keep my project context')
+        self.assertEqual((await self.request('POST', '/api/sessions/clear-target/clear'))[0], 200)
+        self.assertFalse(self.sessions.get_messages('clear-target'))
+        self.assertEqual(self.sessions.get_session_persona('clear-target'), 'explainer')
+        self.assertEqual(len(self.sessions.get_messages('keep-other')), 1)
+        self.model.assert_not_called()
+
     async def test_discovery_lists_real_tools_without_model_call(self):
         self.web.app.state.mcp_servers = self.servers
         status, body = await self.request('GET', '/api/mcp/tools')
